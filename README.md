@@ -9,14 +9,14 @@ added a feature that lets you use deluge to sort your downloads so if that is al
 better alternative.
 
 ####Setup
-Binaries are available if you are on windows, see the binaries folder.
+Binaries are available if you are on windows, see the binaries folder.  
 
-The bare minimum setup:
-1. Choose the config option from the tray icon.
+The bare minimum setup:  
+1. Choose the config option from the tray icon.  
 2. Copy and paste your **private** RSS feed from shanaproject.com (you can find it in settings). This should be the same feed you use with
-your torrent client.
-3. Under "Download Directory" select the directory where your torrent client will place the downloaded episodes.
-4. Under "Storage Directory" choose a folder you want all your episodes to be moved and sorted into.
+your torrent client.  
+3. Under "Download Directory" select the directory where your torrent client will place the downloaded episodes.  
+4. Under "Storage Directory" choose a folder you want all your episodes to be moved and sorted into.  
 
 Closing the main window will simply minimize it to tray. Double-click the icon to bring it back. Alastore is meant to run in the background
 and sit in your tray at all times. You can run it on startup with the -q switch to have it start minimized to tray.
