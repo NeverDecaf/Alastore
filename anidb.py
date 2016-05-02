@@ -3,9 +3,9 @@
 provides methods to access anidb:
 add_File()returns aid if not provided.
 '''
-CLIENT='episodeget'
+CLIENT='alastorehttp'
 CLIENTVER='1'
-UDPCLIENT='pyquickadd'
+UDPCLIENT='alastore'
 UDPCLIENTVER='1'
 DEBUG_ADD_CHAIN=0 # set to 1 to debug mylistadd failures
 import socket
