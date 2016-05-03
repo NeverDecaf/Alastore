@@ -12,19 +12,18 @@ better alternative.
 Binaries are available if you are on windows, see [Releases](https://github.com/NeverDecaf/Alastore/releases/latest).
 
 The bare minimum setup:  
-1. Choose the config option from the tray icon.  
-2. Copy and paste your **private** RSS feed from shanaproject.com (you can find it in settings). This should be the same feed you use with
-your torrent client.  
-3. Under "Download Directory" select the directory where your torrent client will place the downloaded episodes.  
-4. Under "Storage Directory" choose a folder you want all your episodes to be moved and sorted into.  
+  1. Choose the config option from the tray icon.  
+  2. Copy and paste your **private** RSS feed from shanaproject.com (you can find it in settings). This should be the same feed you use with your torrent client.  
+  3. Under "Download Directory" select the directory where your torrent client will place the downloaded episodes.  
+  4. Under "Storage Directory" choose a folder you want all your episodes to be moved and sorted into.
 
-Closing the main window will simply minimize it to tray. Double-click the icon to bring it back. Alastore is meant to run in the background
-and sit in your tray at all times. You can run it on startup with the -q switch to have it start minimized to tray.
+You can double-click the "header" of any series to watch the latest (unwatched) episode. You can also expand a series to rewatch older episodes.
 
+Closing the main window will simply minimize it to tray. Double-click the icon to bring it back. Alastore is meant to run in the background and sit in your tray at all times. You can run it on startup with the -q switch to have it start minimized to tray.
 
-Functionality without a linked anidb account is completely untested. YMMV but it should work fairly well.
-
-For more detail choose the help option in the tray menu.
+######A final warning(s):
+* If you add a season 2 on shanaproject **make sure you delete your follow for season 1.** Following both will cause you to have duplicate episodes downloaded to your computer (this isn't an issue with alastore but one with Shanaproject; it can, however, cause issues with Alastore as well.) With regards to Alastore's anidb update feature, you will want to keep the s2 follow and remove the s1 follow to prevent potential failed mylist adds.
+* Functionality without a linked anidb account is completely untested. YMMV but it should work fairly well.
 
 ####Extra Notes (for devs)
 First, my apologies about the generally digusting and amateruish spaghetti code, I am not a professional.
