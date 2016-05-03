@@ -6,7 +6,7 @@ A hash of the file is not uploaded onto anidb so a generic file add must be used
 The generic file add always fails because the show only has 12 episodes.
 Files like this are being mylistadded over and over and will never be successful.
 Any reliable fix would probably mean user interaction which means a GUI which makes this a more complicated fix.
-Spamming the same add over and over isn't really against anidb's TOS or anything but it seems a bit stupid and it does mean the episode will never appear in your mylist.
+Spamming the same add over and over isn't really against anidb's TOS or anything but it seems a bit stupid and it does mean the episode will never appear in your mylist. There actually already appears to be some spam protection in place, see getToAdd in sql.py.
 
 There is also the other case of no verified aid for a series leading to repeated failed anidb adds. The solution to this one is a bit more risky as you would likely need to do a levenshtein match and then assume it is correct. You should probably avoid doing this as false positives could really screw up your mylist. It is also extremely unlikely for an entire series to air without any ed2k hashes matching your files. Remember, only one has to match for the entire series to be verfied. HOWEVER, if shanaproject decides to change the name for a series after 1-2 un-hashed episode have aired this may become a real problem. This hasn't really happened in years though so it isn't something you should be too worried about.
 
