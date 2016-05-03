@@ -7,22 +7,26 @@ import urlparse
 
 
 # IF YOU PLAN ON ADDING SUPPORT FOR A DIFFERENT RSS, READ THIS FIRST:
-# besides adding new entires to CLEANER and WEBSITE you must also make a new _getFiles method.
-# there are, however, other changes you will need to make.
+# besides adding new entires to CLEANER and WEBSITE and INVALID_REPLACEMENT you must also make a new _getFilesXXXX method.
+# that should be all the changes required.
 class RSSReader:
     url=None
     source = 'unknown'
-    # you can add additional websites here; [scheme, netloc, path, query, fragment]
-    # A non-None value will replace the value in the original url.
-    CLEANER = {'unknown': (None,None,None,None,None),
-               'shanaproject': ('https',None,None,'show_all',''),
-               }
+
     # if key is found in the url, will assume it is from `value` website.
+    # the value here is used as a key in CLEANER and INVALID_REPLACEMENT so make sure it matches.
     WEBSITE = {'shanaproject.com':'shanaproject',
                }
 
+    # you can add additional websites here; [scheme, netloc, path, query, fragment]
+    # A non-None value will replace the value in the original url.
+    # in most cases you probably just want (None,None,None,'','') though you may want to use 'http(s)' just in case.
+    CLEANER = {'unknown': (None,None,None,None,None),
+               'shanaproject': ('https',None,None,'show_all',''),
+               }
     # This is the character the RSS source uses to replace invalid filename characters [\/:*?"<>| ]
     # you will need to find a file that contains one of these invalid characters to find out what it is.
+    # don't forget the ur as paths are unicode, leaving this out may break the whole program.
     INVALID_REPLACEMENT = {'unknown':(ur'[\/:*?"<>| ]',ur'.'),
                            'shanaproject':(ur'[\/:*?"<>| ]',ur'_'),
                            }
@@ -80,7 +84,7 @@ class RSSReader:
 
     def _getFilesGeneric(self,url,count):
         # if you intend to use an RSS feed from a different site, you will need to write a custom
-        # getfiles for that site as well as adding values to CLEANER and WEBSITE to accomodate.
+        # getfiles for that site as well as adding values to CLEANER, WEBSITE, and INVALID_REPLACEMENT to accomodate.
         return []
 
     
@@ -95,6 +99,7 @@ class RSSReader:
         for site in self.WEBSITE:
             if site in self.url:
                 self.source = self.WEBSITE[site]
+        # add a new if here for your new RSS feed.
         if self.source == 'shanaproject':
             return self._getFilesShanaproject(url,count)
         return self._getFilesGeneric(url,count)
