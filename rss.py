@@ -39,7 +39,7 @@ class RSSReader:
         for site in RSSReader.WEBSITE:
             if site in url:
                 source = RSSReader.WEBSITE[site]
-        return INVALID_REPLACEMENT[source]
+        return RSSReader.INVALID_REPLACEMENT[source]
 
     @staticmethod
     def cleanUrl(url):
