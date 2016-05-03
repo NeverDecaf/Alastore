@@ -129,8 +129,8 @@ class SeriesList:
 ##                                         re.sub(ur'\\ ',ur'[ _]',re.escape(re.sub(ur'[\/:*?"<>|]',ur'_',workingFile)))
 ##                                         +u')\n')#(\.!ut)?\n')
 ##                    match = matcher.search(contString)
-                    
-                    workingFile = re.sub(ur'[\/:*?"<>| ]',ur'_',episode['file_name'])
+                    pattern,replacement = self.RSS.invalidCharReplacement(self.user_settings['RSS Feed'])                    
+                    workingFile = re.sub(pattern,replacement,episode['file_name'])
 ##                    if match:
                     if workingFile in potentialMatches:
                         filename = potentialMatches[workingFile]

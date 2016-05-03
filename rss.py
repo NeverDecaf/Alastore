@@ -4,6 +4,11 @@ import contextlib
 import socket
 import re
 import urlparse
+
+
+# IF YOU PLAN ON ADDING SUPPORT FOR A DIFFERENT RSS, READ THIS FIRST:
+# besides adding new entires to CLEANER and WEBSITE you must also make a new _getFiles method.
+# there are, however, other changes you will need to make.
 class RSSReader:
     url=None
     source = 'unknown'
@@ -15,27 +20,36 @@ class RSSReader:
     # if key is found in the url, will assume it is from `value` website.
     WEBSITE = {'shanaproject.com':'shanaproject',
                }
+
+    # This is the character the RSS source uses to replace invalid filename characters [\/:*?"<>| ]
+    # you will need to find a file that contains one of these invalid characters to find out what it is.
+    INVALID_REPLACEMENT = {'unknown':(ur'[\/:*?"<>| ]',ur'.'),
+                           'shanaproject':(ur'[\/:*?"<>| ]',ur'_'),
+                           }
     
     def __init__(self,url=None):
-        self._changeWebsite(url)
         self._changeUrl(url)
 
     def _changeUrl(self,url):
-        self._changeWebsite(url)
-        self.url=self._cleanUrl(url)
+        self.url=self.cleanUrl(url)
 
-    def _changeWebsite(self,url=None):
-        if not url:
-            url = self.url
+    @staticmethod
+    def invalidCharReplacement(url):
+        source = 'unknown'
+        for site in RSSReader.WEBSITE:
+            if site in url:
+                source = RSSReader.WEBSITE[site]
+        return INVALID_REPLACEMENT[source]
+
+    @staticmethod
+    def cleanUrl(url):
         if url:
-            for site in self.WEBSITE:
+            source = 'unknown'
+            for site in RSSReader.WEBSITE:
                 if site in url:
-                    self.source = self.WEBSITE[site]
-    
-    def _cleanUrl(self,url):
-        if url:
+                    source = RSSReader.WEBSITE[site]
             t = urlparse.urlsplit(url)
-            combo = [x if x is not None else t[i] for i,x in enumerate(self.CLEANER[self.source])]
+            combo = [x if x is not None else t[i] for i,x in enumerate(RSSReader.CLEANER[source])]
             return urlparse.urlunsplit(combo)
         return url
 
@@ -78,6 +92,12 @@ class RSSReader:
             self._changeUrl(url)
         if not self.url:
             return []
+        for site in self.WEBSITE:
+            if site in self.url:
+                self.source = self.WEBSITE[site]
         if self.source == 'shanaproject':
             return self._getFilesShanaproject(url,count)
         return self._getFilesGeneric(url,count)
+
+a = RSSReader('http://www.shanaproject.com/feeds/secure/user/8461/OLY13SIBFY/')
+print a.url

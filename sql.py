@@ -3,7 +3,7 @@ import os.path
 import re
 import urlparse
 from StringMatcher import StringMatcher
-
+from rss import RSSReader
 ### READ THIS BEFORE CHANGING THE TIMES BELOW ###
 # setting these higher is a terrible idea
 # because failures still reset the timer so you may wait a week even though it was a simple outage
@@ -101,8 +101,9 @@ class SQLManager:
 
     # saves the supplied user settings into the db.
     def saveSettings(self, rss_url, download_directory, store_directory, anidb_username, anidb_password, sort_by_season, custom_icons, auto_hide_old):
-        t = urlparse.urlsplit(rss_url)
-        rss_url = urlparse.urlunsplit(t[:3]+('show_all',''))
+        rss_url = RSSReader.cleanUrl(rss_url)
+##        t = urlparse.urlsplit(rss_url)
+##        rss_url = urlparse.urlunsplit(t[:3]+('show_all',''))
         self.cursor.execute('''REPLACE INTO user_settings (id, rss, dl_dir, st_dir, anidb_username, anidb_password, season_sort,custom_icons,title_update,dont_show_again,auto_hide_old) VALUES
                                 (?,?,?,?,?,?,?,?,COALESCE((SELECT title_update FROM user_settings WHERE id=0),0),COALESCE((SELECT dont_show_again FROM user_settings WHERE id=0),0),?)''',
                             (0, rss_url, download_directory, store_directory, anidb_username, anidb_password,sort_by_season,custom_icons,auto_hide_old))
