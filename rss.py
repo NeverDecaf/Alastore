@@ -6,20 +6,20 @@ import re
 import urlparse
 class RSSReader:
     url=None
-    PRIVATE_TO_PUBLIC = ur'(/secure)|(?<=/user/)(\d*/)(.*)'
+##    PRIVATE_TO_PUBLIC = ur'(/secure)|(?<=/user/)(\d*/)(.*)'
     def __init__(self,url=None):
-        self.url=self.cleanUrl(url)
+        self.url=self._changeUrl(url)
 
-    def changeUrl(self,url):
-        self.url=self.cleanUrl(url)
+    def _changeUrl(self,url):
+        self.url=self._cleanUrl(url)
         
-    def cleanUrl(self,url):
+    def _cleanUrl(self,url):
         if url:
             t = urlparse.urlsplit(url)
             return urlparse.urlunsplit(t[:3]+('show_all',''))
         return url
 
-    def stripAndNoSSL(self,url):
+    def _stripAndNoSSL(self,url):
         if url:
             t = urlparse.urlsplit(url)
             return urlparse.urlunsplit(('https',)+t[1:3]+('',''))
@@ -30,7 +30,7 @@ class RSSReader:
             [(rss title, file name, torrent url),]
             '''
         if url:
-            self.changeUrl(url)
+            self._changeUrl(url)
         if not self.url:
             return []
         request = urllib2.Request(self.url+'&count='+str(count))
@@ -43,7 +43,7 @@ class RSSReader:
                     #this tuple is title, filename, torrent link
                     episodes.append((item.childNodes[0].firstChild.nodeValue,
                       item.childNodes[2].firstChild.nodeValue,
-                      self.stripAndNoSSL(item.childNodes[1].firstChild.nodeValue)))
+                      self._stripAndNoSSL(item.childNodes[1].firstChild.nodeValue)))
             return episodes
         except urllib2.URLError, e:
             print ("There was an error in rss.py: %r" % e)
@@ -53,5 +53,5 @@ class RSSReader:
 
     #not fully tested, should work.
     # also not used anywhere.
-    def getPublicFeed(self):
-        return re.sub(self.PRIVATE_TO_PUBLIC,lambda m: m.group(2) or '',self.url)
+##    def getPublicFeed(self):
+##        return re.sub(self.PRIVATE_TO_PUBLIC,lambda m: m.group(2) or '',self.url)

@@ -75,13 +75,13 @@ class Icon(object):
                 img = img.convert('RGB')
 
         if img.mode == 'RGB':
-            imgdata = img.tostring('raw', 'BGR', 0, -1)
+            imgdata = img.tobytes('raw', 'BGR', 0, -1)
         elif img.mode == 'RGBA':
             r, g, b, a = img.split()
             img = Image.merge('RGBA', (b, g, r, a))
-            imgdata = img.tostring('raw', 'RGBA', 0, -1)
+            imgdata = img.tobytes('raw', 'RGBA', 0, -1)
         elif img.mode == 'P':
-            imgdata = img.tostring('raw', 'P', 0, -1)
+            imgdata = img.tobytes('raw', 'P', 0, -1)
 
         return (img, imgdata)
 
