@@ -98,6 +98,4 @@ class RSSReader:
         if self.source == 'shanaproject':
             return self._getFilesShanaproject(url,count)
         return self._getFilesGeneric(url,count)
-
-a = RSSReader('http://www.shanaproject.com/feeds/secure/user/8461/OLY13SIBFY/')
-print a.url
+    
