@@ -9,7 +9,7 @@ added a feature that lets you use deluge to sort your downloads so if that is al
 better alternative.
 
 ####Setup
-Binaries are available if you are on windows, see the binaries folder.  
+Binaries are available if you are on windows, see [Releases](https://github.com/NeverDecaf/Alastore/releases/latest).
 
 The bare minimum setup:  
 1. Choose the config option from the tray icon.  
