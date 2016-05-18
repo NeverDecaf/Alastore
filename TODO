@@ -1,7 +1,3 @@
-(Give the option to) delete torrent data for old/watched files. The full torrent file for each episode is stored in the db and pruning these would remove much of the overhead. Another space-saver would be to only store the last 1000 or so aids in your title db as alastore is meant for watching currently airing series which will always have more recent aids.
-- this could even be a checkbox in config like "Delete torrent data after successful download"
-Actually, don't even give the option. torrent data should just always be deleted. Can't think of a good reason to keep it there and it's just taking up tons of space (and memory).
-
 Deal with anidb adds that are never succesful. The problem is as follows:
 An OVA episode or a s2 episode is named something like anime_14 by a subgroup.
 A hash of the file is not uploaded onto anidb so a generic file add must be used.
