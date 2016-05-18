@@ -291,10 +291,10 @@ class SeriesList:
             if len(files)<=2:
                 isEmpty = not reduce(lambda x,y: x or not (y.endswith('.ico') or y.endswith('esktop.ini')), [0]+files)
                 if isEmpty:
-                    shutil.rmtree(path, onerror=remove_readonly)
+                    shutil.rmtree(path, onerror=self.remove_readonly)
                 
     # AND EVEN MORE CAREFUL WITH THIS
-    def remove_readonly(func, path, excinfo):
+    def remove_readonly(self, func, path, excinfo):
         os.chmod(path, stat.S_IWRITE)
         func(path)
 
