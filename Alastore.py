@@ -89,6 +89,8 @@ class AccordianItem( QGroupBox ):
                 self.contextMenu.addAction("&Mark All Watched", self, SLOT('markWatched()'))
 
                 self.markWatchedAction = self.contextMenu.addAction("&Mark Episode Watched", self, SLOT('markIndivWatched()'))
+
+                self.dropAction = self.contextMenu.addAction("&Drop Series", self, SLOT('dropSeries()'))
                 
                 self.connect(self,SIGNAL("customContextMenuRequested(QPoint)"),self.execContextMenu)
 
@@ -106,6 +108,18 @@ class AccordianItem( QGroupBox ):
                 return self._accordianWidget
  
         from PyQt4.QtCore import pyqtSlot
+        @pyqtSlot()
+        def dropSeries(self):
+            drop = DropDialog(self._widget.title,self)#self._widget.title
+####                    self._widget.markSeriesWatched()
+##                    self._widget.refreshData()
+            drop.exec_()
+            drop,delete = drop.getValues()
+            if drop:
+                self._widget.hideSeries()
+                if delete:
+                    self._widget.deleteSeries()
+                self._widget.refreshData()
         @pyqtSlot() 
         def hideSeries(self):
             if not QtGui.QMessageBox.warning(
@@ -1009,7 +1023,10 @@ class SeriesGui(QtGui.QWidget):
         
     def hideSeries(self):
         self.seriesManager.SQL.hideSeries(self.title)
-        
+
+    def dropSeries(self,delete):
+        'drop via shanaproject'
+        'delete all episodes watched or otherwise from your hdd'
         
     def setTitle(self):
         if self.series:
@@ -1201,6 +1218,58 @@ class StillRunningDialog(QtGui.QDialog):
     def saveValues(self):
         self.result=self.dontshow.checkState()
         self.close()
+
+class DropDialog(QtGui.QDialog):
+    def __init__(self, title, parent=None):
+        from PyQt4.QtCore import Qt
+        super(DropDialog, self).__init__(parent)
+        self.setWindowTitle(self.tr("Drop Series"))
+        self.setWindowFlags(self.windowFlags() &~ Qt.WindowContextHelpButtonHint)
+##        self.setSizeGripEnabled(True)
+##        self.setAttribute(Qt.WA_DeleteOnClose)
+
+##        mainLayout = QtGui.QGridLayout()
+        mainLayout = QtGui.QVBoxLayout()
+##        mainLayout.addStretch(1)
+        mainLayout.setAlignment(Qt.AlignCenter)
+
+        optionsLayout = QtGui.QFormLayout()
+        confirmLayout = QtGui.QGridLayout()
+
+        top=QtGui.QWidget()
+        bottom=QtGui.QWidget()
+        top.setLayout(optionsLayout)
+        bottom.setLayout(confirmLayout)
+        mainLayout.setAlignment(Qt.AlignCenter)
+
+        optionsLayout.addRow('''You are about to drop the series: %s.
+This will delete your Shana Project follow and hide this series.
+Are you sure you want to drop %s?'''%(title,title),None)
+        self.deleteall=QtGui.QCheckBox('Also delete all episodes on my computer.')
+        optionsLayout.addRow(self.deleteall)
+        
+        self.confirmButton=QtGui.QPushButton('OK')
+        self.cancelButton=QtGui.QPushButton('Cancel')
+##        confirmLayout.addWidget(QtGui.QSpacerItem(),0,0)
+        confirmLayout.addWidget(self.confirmButton,0,1)
+        confirmLayout.addWidget(self.cancelButton,0,2)
+        mainLayout.addWidget(top)
+        mainLayout.addWidget(bottom)
+        self.setLayout(mainLayout)
+
+        self.connect(self.confirmButton,SIGNAL("released()"),self.saveValues)
+        self.connect(self.cancelButton,SIGNAL("released()"),self.close)
+
+        self.confirm = 0
+        self.delete = 0
+        
+    def getValues(self):
+        return self.confirm,self.delete
+
+    def saveValues(self):
+        self.delete=self.deleteall.checkState()
+        self.confirm = 1
+        self.close()
         
 from qtrayico import Systray
 class trayIcon(Systray):
@@ -1309,7 +1378,7 @@ ul { margin: 0; padding: 0; }
         self.main_window.centralWidget().quickUpdate()
         
     def showConfig(self):
-        settings = self.seriesManager.SQL.getSettings(1)
+        settings = self.seriesManager.SQL.getSettings(raw=True,fetchanyway=True)
         d=SettingsDialog(settings,self)
         d.exec_()
         if d.getValues():
@@ -1369,7 +1438,6 @@ if __name__ == '__main__':
         main.show()
 ##    d=SettingsDialog(main)
 ##    d.exec_()
-
 
     sys.exit(app.exec_())
 

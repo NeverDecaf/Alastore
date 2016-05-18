@@ -129,16 +129,20 @@ class SQLManager:
         self.conn.commit()
 
     # returns a dict of all settings, keys are the full name of each setting, which can be used directly in a GUI.
-    def getSettings(self,raw=False):
+    # raw doesn't expand the dir names, allowing you to use env variables if you wish
+    # fetchanyway will retrieve settings even if they aren't valid.
+    def getSettings(self,raw=False,fetchanyway=False):
         if raw:
             self.cursor.execute('''SELECT rss, dl_dir, st_dir, anidb_username, anidb_password, season_sort, custom_icons, auto_hide_old, shanaproject_username, shanaproject_password FROM user_settings WHERE id=0''')
         else:
             self.cursor.execute('''SELECT rss, expandvars(dl_dir), expandvars(st_dir), anidb_username, anidb_password, season_sort, custom_icons, auto_hide_old, shanaproject_username, shanaproject_password FROM user_settings WHERE id=0''')
         settings = self.cursor.fetchone()
-##        if not settings:
-##            return None
-##        if not settings[0] and not settings[1] and not settings[2]:
-##            return None
+        if fetchanyway:
+            return dict(zip(self.COLUMN_NAMES,settings))
+        if not settings:
+            return None
+        if not settings[0] and not settings[1] and not settings[2]:
+            return None
         #expand environment vars in the paths.
         return dict(zip(self.COLUMN_NAMES,settings))
 
