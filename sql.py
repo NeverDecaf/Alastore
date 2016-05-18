@@ -114,7 +114,7 @@ class SQLManager:
                      shanaproject_password text DEFAULT '' ''')
         except sqlite3.OperationalError, msg:
             if str(msg)!=ur'duplicate column name: shanaproject_password':
-                raise 
+                raise
         self.conn.commit()
 
     # saves the supplied user settings into the db.
@@ -194,7 +194,7 @@ class SQLManager:
         self.conn.commit()
 
     def dropSeries(self, title):
-        self.cursor.execute('''UPDATE episode_data SET downloaded=0, download_percent=0 WHERE id IN (SELECT id FROM shana_series WHERE title=?)''',(title,))
+        self.cursor.execute('''UPDATE episode_data SET downloaded=0, download_percent=0, torrent_data=NULL WHERE id IN (SELECT id FROM shana_series WHERE title=?)''',(title,))
         self.conn.commit()
 
     # marks an/all episodes of a series as watched, regardless of file state.
