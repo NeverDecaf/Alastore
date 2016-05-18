@@ -9,12 +9,18 @@ class ShanaLink:
 
     LOGGED_IN_XPATH = "//a[@href='/logout/']"
     
-    def __init__(self, username, password):
+    def __init__(self, username = '', password = ''):
         self.username = username
         self.password = password
         self.SESSION = session()
-        self._login()
+##        self._login()
 
+    def update_creds(self, username, password):
+        if not (username == self.username and password == self.password):
+            self.SESSION = session()
+            self.username = username
+            self.password = password
+        
     # Returns true on successful login or false otherwise
     def _login(self):
         response = self.SESSION.get(self.LOGIN_URL)

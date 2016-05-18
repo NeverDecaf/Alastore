@@ -116,10 +116,7 @@ class AccordianItem( QGroupBox ):
             drop.exec_()
             drop,delete = drop.getValues()
             if drop:
-                self._widget.hideSeries()
-                if delete:
-                    self._widget.deleteSeries()
-                self._widget.refreshData()
+                self._widget.dropSeries(delete)
         @pyqtSlot() 
         def hideSeries(self):
             if not QtGui.QMessageBox.warning(
@@ -725,7 +722,7 @@ class AccordianWidget( QScrollArea ):
             self.thread = SingleCallThread(self.seriesManager.icheckFiles,self.lock,self)
             self.connect(self.thread, SIGNAL("finished()"), lambda:self.fileUpdateEnd(quick))
             try:
-                self.seriesManager._getUserSettings()
+                self._getUserSettings()
                 self.seriesManager._populateSeries()
                 self.seriesManager.prepCheckFiles()
 ##                self.seriesManager.phase2Prep(quick)
@@ -1025,9 +1022,29 @@ class SeriesGui(QtGui.QWidget):
         self.seriesManager.SQL.hideSeries(self.title)
 
     def dropSeries(self,delete):
-        'drop via shanaproject'
-        'delete all episodes watched or otherwise from your hdd'
+        dropthread = self.DropThread(lambda:self.seriesManager.SHANALINK.delete_follow(self.title), self.dropComplete, delete, self)
+        dropthread.start()
+
+    def dropComplete(self, success, delete):
+        if success:
+            self.seriesManager.dropSeries(self.title,delete)
+            self.refreshData()
+        else:
+            QtGui.QMessageBox.information(self,'Drop Failed','Could not connect to Shana Project to drop %s, check your login credentials and internet connection.'%self.title)
         
+    class DropThread(QtCore.QThread):
+            finished = QtCore.pyqtSignal(object,object)
+    
+            def __init__(self, method, callback, delete, parent=None):
+                QtCore.QThread.__init__(self, parent)
+                self.runmethod = method
+                self.delete = delete
+                self.finished.connect(callback)
+                
+            def run(self):
+                success = self.runmethod()
+                self.finished.emit(success, self.delete)
+
     def setTitle(self):
         if self.series:
             if self.latestEpisode:

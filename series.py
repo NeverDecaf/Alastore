@@ -17,6 +17,9 @@ import shutil
 from bencode import BTFailure
 import logging
 import errno
+from shana_interface import ShanaLink
+import stat
+
 class SeriesList:
     series=None
     SQL=None
@@ -32,6 +35,7 @@ class SeriesList:
         self.SQL.connect()
         self.RSS=rss.RSSReader()
         self.series={}
+        self.SHANALINK = ShanaLink()
         #just init the bare minimum things.
         self._getUserSettings()
         self._populateSeries()
@@ -174,7 +178,43 @@ class SeriesList:
             os.startfile(filepath)
         elif os.name == 'posix':
             subprocess.call(('xdg-open', filepath))
-            
+
+    def dropSeries(self, title, delete):
+        self.SQL.hideSeries(title)
+        if delete:
+            import shutil
+            paths = self.SQL.getAllPaths(title)
+            print 'rming',set(paths)
+            for path in paths:
+                print 
+                directory = os.path.dirname(path[0])
+                if os.path.isfile(path[0]):
+                    os.remove(path[0])
+                self.cleanFolder(directory)
+
+##    def dropSeries(self, title, delete):
+##        try:
+##            if self.SHANALINK.delete_follow(title):
+##                #only hide if successful.
+##                self.SQL.hideSeries(title)
+##                if delete:
+##                    import shutil
+##                    paths = self.SQL.getAllPaths(title)
+##                    for path in paths:
+##                        directory = os.path.dirname(path[0])
+##                        if os.path.exists(directory):
+####                            shutil.rmtree(directory, ignore_errors=True)
+##                            print 'rming %s'%directory
+##                    
+##                return 1
+##        except:
+##            raise
+##            return 0
+##        return 0
+
+    def validShanaProjectCredentials(self):
+        return not not self.user_settings['Shana Project Username'] and not not self.user_settings['Shana Project Password']
+    
     #data in this case is the list that can be obtained from self.series
     #it contains all the info available about a specific episode, making it easy to manipulate it.
     def prepPlayAndSort(self):
@@ -244,35 +284,21 @@ class SeriesList:
                     self.SQL.changePath(path,destfile)
                 except IOError,e:
                     print 'failed to move file: %r'%e
-                leftovers = os.listdir(directory)
-                if len(leftovers)<=2:
-                    if os.path.exists(os.path.join(directory,'desktop.ini')):
-                        try:
-                            os.remove(os.path.join(directory,'desktop.ini'))
-                        except OSError,e:
-                            print 'failed to remove desktop.ini: %r'%e
-                leftovers = os.listdir(directory)
-                if len(leftovers)==1:
-                    if os.path.splitext(leftovers[0])[1]==u'.ico' and len(leftovers[0])<10:
-                        try:
-                            os.remove(os.path.join(directory,leftovers[0]))
-                            leftovers.pop(0)
-                        except OSError,e:
-                            print 'failed to remove icon: %r'%e
-                try:
-                    if not leftovers: # the directory is empty
-                        if not os.access(directory,os.W_OK): # check for write access
-                            os.chmod(directory,0777) # get it if we need it.
-                        os.rmdir(directory) #this hangs for a few seconds if an oserror will occur, thats the reason for the os.access
-                except OSError,e:
-                    if e.errno==5: #redundant but just in case something goes wrong with os.access we can try once more
-                        try:
-                            os.chmod(directory,0777)
-                            os.rmdir(directory)
-                        except OSError,e2:
-                            print 'failed to remove directory: %r'%e2
-                    else:
-                        print 'failed to remove directory: %r'%e
+                self.cleanFolder(directory)
+
+    # BE VERY CAREFUL WITH THIS.
+    def cleanFolder(self,path):
+        if os.path.isdir(path):
+            files = os.listdir(path)
+            if len(files)<=2:
+                isEmpty = not reduce(lambda x,y: x or not (y.endswith('.ico') or y.endswith('esktop.ini')), [0]+files)
+                if isEmpty:
+                    shutil.rmtree(path, onerror=remove_readonly)
+                
+    # AND EVEN MORE CAREFUL WITH THIS
+    def remove_readonly(func, path, excinfo):
+        os.chmod(path, stat.S_IWRITE)
+        func(path)
 
     def close(self):
         self.SQL.close()
@@ -418,6 +444,7 @@ class SeriesList:
 
     def _getUserSettings(self):
         self.user_settings=self.SQL.getSettings()
+        self.SHANALINK.update_creds(self.user_settings['Shana Project Username'],self.user_settings['Shana Project Password'])
     # these are all the phases of an update. anything with Thread is meant to be time intensive
     # and should be run in a separate thread. the other functions should be very light and execute
     # instantaneously from a human viewpoint.

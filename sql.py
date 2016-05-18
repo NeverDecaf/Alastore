@@ -104,14 +104,14 @@ class SQLManager:
         # this has to be done as a backwards compatibility measure, remove in the next minor version.
         try:
             self.cursor.execute('''ALTER TABLE user_settings ADD COLUMN
-                     shanaproject_username text DEFAULT ''''')
+                     shanaproject_username text DEFAULT '' ''')
         except sqlite3.OperationalError, msg:
             if str(msg)!=ur'duplicate column name: shanaproject_username':
                 raise
 
         try:
             self.cursor.execute('''ALTER TABLE user_settings ADD COLUMN
-                     shanaproject_password text DEFAULT ''''')
+                     shanaproject_password text DEFAULT '' ''')
         except sqlite3.OperationalError, msg:
             if str(msg)!=ur'duplicate column name: shanaproject_password':
                 raise
@@ -309,8 +309,13 @@ WHERE title=?""",title*6)
 ##        self.conn.commit()
 
     def getAllWatchedPaths(self,id):
-        '''gets a list of paths for all files/episodes for series with given id'''
+        '''gets a list of paths for all watched files/episodes for series with given id'''
         self.cursor.execute('''SELECT path from episode_data WHERE id=? AND watched=1 AND downloaded=1''',(id,))
+        return self.cursor.fetchall()
+
+    def getAllPaths(self,title):
+        '''gets a list of paths for all files/episodes for series with given title'''
+        self.cursor.execute('''SELECT path from episode_data JOIN shana_series WHERE shana_series.id=episode_data.id AND title=? AND downloaded=1''',(title,))
         return self.cursor.fetchall()
         
     def changePath(self,oldPath,newPath):
