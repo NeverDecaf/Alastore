@@ -59,7 +59,6 @@ def anidb_series_info(aid):
     return airdate,imageurl
 
 def anidb_title_list():
-    return None
     request = urllib2.Request('http://anidb.net/api/anime-titles.xml.gz',None,FAKE_HEADERS)
     with contextlib.closing(urllib2.urlopen(request)) as response:
 ##    with contextlib.closing(open('titles.xml','rb')) as response:
