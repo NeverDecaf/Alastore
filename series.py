@@ -182,15 +182,13 @@ class SeriesList:
     def dropSeries(self, title, delete):
         self.SQL.hideSeries(title)
         if delete:
-            import shutil
             paths = self.SQL.getAllPaths(title)
-            print 'rming',set(paths)
             for path in paths:
-                print 
                 directory = os.path.dirname(path[0])
                 if os.path.isfile(path[0]):
                     os.remove(path[0])
                 self.cleanFolder(directory)
+            self.SQL.dropSeries(title)
 
 ##    def dropSeries(self, title, delete):
 ##        try:

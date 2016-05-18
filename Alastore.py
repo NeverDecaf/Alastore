@@ -156,6 +156,11 @@ You should only use this option if a file fails to download or is moved/deleted 
         def execContextMenu(self,position):
 ##            gpos=self._accordianWidget.viewport().mapToGlobal(position)
             gpos=self.mapToGlobal(position)
+
+            if self._widget.seriesManager.validShanaProjectCredentials():
+                self.dropAction.setEnabled(True)
+            else:
+                self.dropAction.setEnabled(False)
             if self._widget.episodeSelected() and position.y()>self.itemHeight and position.y()<self.rect().height()-1:
                 self.markWatchedAction.setEnabled(True)
             else:

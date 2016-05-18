@@ -194,6 +194,10 @@ class SQLManager:
         self.cursor.execute('''UPDATE shana_series SET hidden=1 WHERE title=?''',(title,))
         self.conn.commit()
 
+    def dropSeries(self, title):
+        self.cursor.execute('''UPDATE episode_data SET downloaded=0, download_percent=0 WHERE id IN (SELECT id FROM shana_series WHERE title=?)''',(title,))
+        self.conn.commit()
+
     # marks an/all episodes of a series as watched, regardless of file state.
     def forceWatched(self,title=None,torrenturl=None):
         if torrenturl:
