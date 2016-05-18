@@ -114,8 +114,7 @@ class SQLManager:
                      shanaproject_password text DEFAULT '' ''')
         except sqlite3.OperationalError, msg:
             if str(msg)!=ur'duplicate column name: shanaproject_password':
-                raise
-            
+                raise 
         self.conn.commit()
 
     # saves the supplied user settings into the db.
@@ -301,10 +300,12 @@ WHERE title=?""",title*6)
     
     def setDownloading(self,torrent_url,filename,torrentdata,percent_downloaded):
         path=(os.path.join(self.getSettings()['Download Directory'],filename))
-        '''given the local id and episode number, mark an episode as downloaded.'''
+        '''given the local id and episode number, mark an episode as downloaded. If download is complete, delete torrent data from db to reclaim space.'''
         downloaded=0
         if percent_downloaded==100:
             downloaded=1
+        if downloaded:
+            torrentdata = None
         self.cursor.execute('''UPDATE episode_data SET downloaded=?,file_name=?,path=?,torrent_data=?,download_percent=? WHERE torrent=?''',(downloaded,filename,path,torrentdata,percent_downloaded,torrent_url))
         self.conn.commit()
 
