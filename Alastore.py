@@ -745,7 +745,9 @@ class AccordianWidget( QScrollArea ):
             self.thread = SingleCallThread(lambda:self.seriesManager.phase1Thread(quick),self.lock,self)
             self.connect(self.thread, SIGNAL("finished()"), lambda:self.updateMid0(quick))
             try:
-                self.seriesManager.phase1Prep(quick)
+                if not self.seriesManager.phase1Prep(quick):
+                        self.lock.unlock()
+                        return # false means there is no config yet, just quit out.
             except:
                 self.lock.unlock()
                 raise
@@ -1047,23 +1049,24 @@ class SettingsDialog(QtGui.QDialog):
 
         optionsLayout.addRow("<b>Required Settings:</b>",None)
 
+        self.options = {}
 
-        self.rssFeed = QtGui.QLineEdit()
-        self.rssFeed.setPlaceholderText("Paste your private RSS feed here.")
-        optionsLayout.addRow("Private RSS Feed",self.rssFeed)
+        self.options['RSS Feed'] = QtGui.QLineEdit()
+        self.options['RSS Feed'].setPlaceholderText("Paste your private RSS feed here.")
+        optionsLayout.addRow("Private RSS Feed",self.options['RSS Feed'])
 
         
         fileSelect=QtGui.QWidget()
         fileSelectLayout=QtGui.QGridLayout()
         fileSelect.setLayout(fileSelectLayout)
 
-        self.dlDir=QtGui.QLineEdit()
-        self.dlDir.setPlaceholderText("Source Directory")
+        self.options['Download Directory']=QtGui.QLineEdit()
+        self.options['Download Directory'].setPlaceholderText("Source Directory")
         self.dlBrowse=QtGui.QPushButton('&Browse')
 
-        self.connect(self.dlBrowse,SIGNAL("released()"),lambda:self.folderSelect(self.dlDir))
+        self.connect(self.dlBrowse,SIGNAL("released()"),lambda:self.folderSelect(self.options['Download Directory']))
         
-        fileSelectLayout.addWidget(self.dlDir,0,0)
+        fileSelectLayout.addWidget(self.options['Download Directory'],0,0)
         fileSelectLayout.addWidget(self.dlBrowse,0,1)
         optionsLayout.addRow("Download Directory",fileSelect)
 
@@ -1075,13 +1078,13 @@ class SettingsDialog(QtGui.QDialog):
         fileSelectLayout=QtGui.QGridLayout()
         fileSelect.setLayout(fileSelectLayout)
 
-        self.stDir=QtGui.QLineEdit()
-        self.stDir.setPlaceholderText("Destination Directory")
+        self.options['Save Directory']=QtGui.QLineEdit()
+        self.options['Save Directory'].setPlaceholderText("Destination Directory")
         self.stBrowse=QtGui.QPushButton('&Browse')
 
-        self.connect(self.stBrowse,SIGNAL("released()"),lambda:self.folderSelect(self.stDir))
+        self.connect(self.stBrowse,SIGNAL("released()"),lambda:self.folderSelect(self.options['Save Directory']))
         
-        fileSelectLayout.addWidget(self.stDir,0,0)
+        fileSelectLayout.addWidget(self.options['Save Directory'],0,0)
         fileSelectLayout.addWidget(self.stBrowse,0,1)
         optionsLayout.addRow("Storage Directory",fileSelect)
 
@@ -1089,24 +1092,31 @@ class SettingsDialog(QtGui.QDialog):
         fileSelect.setContentsMargins(0, 0, 0, 0)
 
         optionsLayout.addRow("<b>Optional Settings:</b>",None)
-        self.anidbUser = QtGui.QLineEdit()
-        optionsLayout.addRow("anidb Username",self.anidbUser)
+        self.options['anidb Username'] = QtGui.QLineEdit()
+        optionsLayout.addRow("anidb Username",self.options['anidb Username'])
 
-        self.anidbPass = QtGui.QLineEdit()
-        self.anidbPass.setEchoMode(QtGui.QLineEdit.Password)
-        optionsLayout.addRow("anidb Password",self.anidbPass)
+        self.options['anidb Password'] = QtGui.QLineEdit()
+        self.options['anidb Password'].setEchoMode(QtGui.QLineEdit.Password)
+        optionsLayout.addRow("anidb Password",self.options['anidb Password'])
+
+        self.options['Shana Project Username'] = QtGui.QLineEdit()
+        optionsLayout.addRow("Shana Project Username",self.options['Shana Project Username'])
+
+        self.options['Shana Project Password'] = QtGui.QLineEdit()
+        self.options['Shana Project Password'].setEchoMode(QtGui.QLineEdit.Password)
+        optionsLayout.addRow("Shana Project Password",self.options['Shana Project Password'])
 
 ##        optionsLayout.addRow("<b>Unreliable without an anidb account:</b>",None)
-        self.useSubfolders=QtGui.QCheckBox('Sort Episodes by Season')
-        optionsLayout.addRow(self.useSubfolders)
+        self.options['Season Sort']=QtGui.QCheckBox('Sort Episodes by Season')
+        optionsLayout.addRow(self.options['Season Sort'])
 
-        self.posterIcons=QtGui.QCheckBox('Use Poster Art for Folder Icons (Windows Only)')
+        self.options['Poster Icons']=QtGui.QCheckBox('Use Poster Art for Folder Icons (Windows Only)')
         if os.name!='nt':
-                self.posterIcons.setDisabled(True)
-        optionsLayout.addRow(self.posterIcons)
+                self.options['Poster Icons'].setDisabled(True)
+        optionsLayout.addRow(self.options['Poster Icons'])
 
-        self.hideOld=QtGui.QCheckBox('Automatically Hide Older Series (~1 month old)')
-        optionsLayout.addRow(self.hideOld)
+        self.options['Auto Hide Old']=QtGui.QCheckBox('Automatically Hide Older Series (~1 month old)')
+        optionsLayout.addRow(self.options['Auto Hide Old'])
 
         self.saveButton=QtGui.QPushButton('Save')
         self.cancelButton=QtGui.QPushButton('Cancel')
@@ -1121,17 +1131,12 @@ class SettingsDialog(QtGui.QDialog):
         mainLayout.addWidget(bottom)
         self.setLayout(mainLayout)
 
-        if initialSettings:
-            self.rssFeed.setText(initialSettings['RSS Feed'])
-            self.dlDir.setText(initialSettings['Download Directory']) 
-            self.stDir.setText(initialSettings['Save Directory'])
-            self.anidbUser.setText(initialSettings['anidb Username'])
-            self.anidbPass.setText(initialSettings['anidb Password'])
-            self.useSubfolders.setCheckState(initialSettings['Season Sort'])
-            self.posterIcons.setCheckState(initialSettings['Poster Icons'])
-            self.hideOld.setCheckState(initialSettings['Auto Hide Old'])
-            
-        
+        for key in initialSettings:
+                if isinstance(self.options[key], QtGui.QCheckBox):
+                        self.options[key].setCheckState(initialSettings[key])
+                else:
+                        self.options[key].setText(initialSettings[key])
+                        
     def getValues(self):
         return self.result
 
@@ -1145,14 +1150,11 @@ class SettingsDialog(QtGui.QDialog):
 
     def saveValues(self):
         self.result={}
-        self.result['rss']=self.rssFeed.text() if len(self.rssFeed.text()) else None
-        self.result['source']=self.dlDir.text() if len(self.dlDir.text()) else None
-        self.result['dest']=self.stDir.text() if len(self.stDir.text()) else None
-        self.result['user']=self.anidbUser.text() if len(self.anidbUser.text()) else None
-        self.result['pass']=self.anidbPass.text() if len(self.anidbPass.text()) else None
-        self.result['subfolders']=self.useSubfolders.checkState()
-        self.result['icons']=self.posterIcons.checkState()
-        self.result['hideold']=self.hideOld.checkState()
+        for key in self.options:
+                if isinstance(self.options[key], QtGui.QCheckBox):
+                        self.result[key] = self.options[key].checkState()
+                else:
+                        self.result[key] = str(self.options[key].text())# or None
         self.close()
         
 class StillRunningDialog(QtGui.QDialog):
@@ -1311,16 +1313,8 @@ ul { margin: 0; padding: 0; }
         d=SettingsDialog(settings,self)
         d.exec_()
         if d.getValues():
-            settings= d.getValues()
-            self.seriesManager.SQL.saveSettings(str(settings['rss']),
-                                                str(settings['source']),
-                                                str(settings['dest']),
-                                                str(settings['user']),
-                                                str(settings['pass']),
-                                                settings['subfolders'],
-                                                settings['icons'],
-                                                settings['hideold'],
-                                                )
+            settings = d.getValues()
+            self.seriesManager.SQL.saveSettings(*[settings[key] for key in self.seriesManager.SQL.COLUMN_NAMES])
             self.refresh()
         d.deleteLater()
         

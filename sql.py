@@ -36,6 +36,7 @@ class SQLManager:
     EPISODE_NUM = re.compile(u'(?<= - )(\d+\.?\d*)') #make sure you get the last one [-1]
     SHANA_TITLE = re.compile(u'.*(?= - \d)')
     SUBGROUP = re.compile(u'(?<=\[)[^\]]*(?=])')#make sure you get the last one [-1]
+    COLUMN_NAMES = ['RSS Feed','Download Directory','Save Directory','anidb Username','anidb Password','Season Sort','Poster Icons','Auto Hide Old','Shana Project Username','Shana Project Password']
     # init. supply the name of the db.
     def __init__(self, db='Alastore.db'):
         self.db=db
@@ -70,7 +71,7 @@ class SQLManager:
         return a.distance()
 
     def expandvars(self,path):
-        return os.path.expanduser(os.path.expandvars(path))
+        return os.path.expanduser(os.path.expandvars(path)) if path else u''
     
     # Creates all the tables we will be using. can be called each connect just for safety.
     def _createTables(self):
@@ -82,9 +83,9 @@ class SQLManager:
         self.conn.create_function('editdist',2,self.editdist)
         self.conn.create_function('expandvars',1,self.expandvars)
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS user_settings
-                 (id integer PRIMARY KEY DEFAULT 0, rss text, dl_dir text, st_dir text, anidb_username text, anidb_password text,
+                 (id integer PRIMARY KEY DEFAULT 0, rss text DEFAULT '', dl_dir text DEFAULT '', st_dir text DEFAULT '', anidb_username text DEFAULT '', anidb_password text DEFAULT '',
                  season_sort integer DEFAULT 2, custom_icons integer DEFAULT 2, title_update integer DEFAULT 0, dont_show_again integer DEFAULT 0,
-                 auto_hide_old integer DEFAULT 2, shanaproject_username text, shanaproject_password text)''')
+                 auto_hide_old integer DEFAULT 2, shanaproject_username text DEFAULT '', shanaproject_password text DEFAULT '')''')
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS shana_series
                  (id integer PRIMARY KEY AUTOINCREMENT, title text, aid integer DEFAULT NULL, cover_art integer DEFAULT 0,
                  hidden integer DEFAULT 0, airdate text, season text, poster_url text, series_info integer DEFAULT 0,
@@ -94,7 +95,8 @@ class SQLManager:
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS episode_data
                  (id integer, file_name text, episode integer, path text, display_name text, watched integer DEFAULT 0,downloaded integer DEFAULT 0,
                  subgroup text, torrent text PRIMARY KEY, torrent_data BLOB DEFAULT NULL, download_percent integer DEFAULT 0)''')
-        self.cursor.execute('''INSERT OR IGNORE INTO user_settings (id, rss, dl_dir, st_dir, anidb_username, anidb_password) VALUES (0,'','','','','')''')
+##        self.cursor.execute('''INSERT OR IGNORE INTO user_settings (id, rss, dl_dir, st_dir, anidb_username, anidb_password, shanaproject_username, shanaproject_password) VALUES (0,'','','','','','','')''')
+        self.cursor.execute('''INSERT OR IGNORE INTO user_settings (id) VALUES (0)''')
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS bad_torrents
                  (url text PRIMARY KEY, last_update integer DEFAULT (strftime('%s', 'now')))''')
 
@@ -102,17 +104,18 @@ class SQLManager:
         # this has to be done as a backwards compatibility measure, remove in the next minor version.
         try:
             self.cursor.execute('''ALTER TABLE user_settings ADD COLUMN
-                     shanaproject_username text''')
+                     shanaproject_username text DEFAULT ''''')
         except sqlite3.OperationalError, msg:
             if str(msg)!=ur'duplicate column name: shanaproject_username':
                 raise
 
         try:
             self.cursor.execute('''ALTER TABLE user_settings ADD COLUMN
-                     shanaproject_password text''')
+                     shanaproject_password text DEFAULT ''''')
         except sqlite3.OperationalError, msg:
             if str(msg)!=ur'duplicate column name: shanaproject_password':
                 raise
+            
         self.conn.commit()
 
     # saves the supplied user settings into the db.
@@ -132,12 +135,12 @@ class SQLManager:
         else:
             self.cursor.execute('''SELECT rss, expandvars(dl_dir), expandvars(st_dir), anidb_username, anidb_password, season_sort, custom_icons, auto_hide_old, shanaproject_username, shanaproject_password FROM user_settings WHERE id=0''')
         settings = self.cursor.fetchone()
-        if not settings:
-            return None
-        if settings[0] and settings[1] and settings[2]==None:
-            return None
+##        if not settings:
+##            return None
+##        if not settings[0] and not settings[1] and not settings[2]:
+##            return None
         #expand environment vars in the paths.
-        return dict(zip(['RSS Feed','Download Directory','Save Directory','anidb Username','anidb Password','Season Sort','Poster Icons','Auto Hide Old','Shana Project Username','Shana Project Password'],settings))
+        return dict(zip(self.COLUMN_NAMES,settings))
 
 ##    def addBadTorrent(self,url):
 ##        self.cursor.execute('''REPLACE INTO bad_torrents VALUES (?)''',(url,))

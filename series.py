@@ -423,12 +423,15 @@ class SeriesList:
     # instantaneously from a human viewpoint.
     def phase1Prep(self,quick=False):
         self._getUserSettings()
+        if not self.user_settings['RSS Feed'] and not self.user_settings['Download Directory'] and not self.user_settings['Save Directory']:
+            return False
         self._populateSeries()
         self.SQL.hideOldSeries()
         self.prepLoadRSS()
         if not quick:
             self.prepCacheTitles()
             self.prepHashFiles()
+        return True
             
     def phase1Thread(self,quick=False):
         self.iloadRSS()
