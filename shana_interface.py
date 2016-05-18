@@ -13,10 +13,10 @@ class ShanaLink:
         self.username = username
         self.password = password
         self.SESSION = session()
-        self.login()
+        self._login()
 
     # Returns true on successful login or false otherwise
-    def login(self):
+    def _login(self):
         response = self.SESSION.get(self.LOGIN_URL)
         etree = lxmlhtml.fromstring(response.text)
         if etree.xpath(self.LOGGED_IN_XPATH):
@@ -35,10 +35,10 @@ class ShanaLink:
     # Deletes a follow by series name. NAME MUST BE EXACT (including caps)
     # Returns True on success, False otherwise.
     def delete_follow(self, name):
-        if not self.login():
+        if not self._login():
             return False
         # generate an xpath to match the name of the follow:
-        match_name = "//tr[td/a/strong/text()='%s']/@id"%name
+        match_name = "//tr[td//text()='%s']/@id"%name
         response = self.SESSION.get(self.LIST_URL)
         etree = lxmlhtml.fromstring(response.text)
         follow_id = etree.xpath(match_name)

@@ -84,7 +84,7 @@ class SQLManager:
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS user_settings
                  (id integer PRIMARY KEY DEFAULT 0, rss text, dl_dir text, st_dir text, anidb_username text, anidb_password text,
                  season_sort integer DEFAULT 2, custom_icons integer DEFAULT 2, title_update integer DEFAULT 0, dont_show_again integer DEFAULT 0,
-                 auto_hide_old integer DEFAULT 2)''')
+                 auto_hide_old integer DEFAULT 2, shanaproject_username text, shanaproject_password text)''')
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS shana_series
                  (id integer PRIMARY KEY AUTOINCREMENT, title text, aid integer DEFAULT NULL, cover_art integer DEFAULT 0,
                  hidden integer DEFAULT 0, airdate text, season text, poster_url text, series_info integer DEFAULT 0,
@@ -97,31 +97,47 @@ class SQLManager:
         self.cursor.execute('''INSERT OR IGNORE INTO user_settings (id, rss, dl_dir, st_dir, anidb_username, anidb_password) VALUES (0,'','','','','')''')
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS bad_torrents
                  (url text PRIMARY KEY, last_update integer DEFAULT (strftime('%s', 'now')))''')
+
+
+        # this has to be done as a backwards compatibility measure, remove in the next minor version.
+        try:
+            self.cursor.execute('''ALTER TABLE user_settings ADD COLUMN
+                     shanaproject_username text''')
+        except sqlite3.OperationalError, msg:
+            if str(msg)!=ur'duplicate column name: shanaproject_username':
+                raise
+
+        try:
+            self.cursor.execute('''ALTER TABLE user_settings ADD COLUMN
+                     shanaproject_password text''')
+        except sqlite3.OperationalError, msg:
+            if str(msg)!=ur'duplicate column name: shanaproject_password':
+                raise
         self.conn.commit()
 
     # saves the supplied user settings into the db.
-    def saveSettings(self, rss_url, download_directory, store_directory, anidb_username, anidb_password, sort_by_season, custom_icons, auto_hide_old):
+    def saveSettings(self, rss_url, download_directory, store_directory, anidb_username, anidb_password, sort_by_season, custom_icons, auto_hide_old, shanaproject_username, shanaproject_password):
         rss_url = RSSReader.cleanUrl(rss_url)
 ##        t = urlparse.urlsplit(rss_url)
 ##        rss_url = urlparse.urlunsplit(t[:3]+('show_all',''))
-        self.cursor.execute('''REPLACE INTO user_settings (id, rss, dl_dir, st_dir, anidb_username, anidb_password, season_sort,custom_icons,title_update,dont_show_again,auto_hide_old) VALUES
-                                (?,?,?,?,?,?,?,?,COALESCE((SELECT title_update FROM user_settings WHERE id=0),0),COALESCE((SELECT dont_show_again FROM user_settings WHERE id=0),0),?)''',
-                            (0, rss_url, download_directory, store_directory, anidb_username, anidb_password,sort_by_season,custom_icons,auto_hide_old))
+        self.cursor.execute('''REPLACE INTO user_settings (id, rss, dl_dir, st_dir, anidb_username, anidb_password, season_sort,custom_icons,title_update,dont_show_again,auto_hide_old,shanaproject_username,shanaproject_password) VALUES
+                                (?,?,?,?,?,?,?,?,COALESCE((SELECT title_update FROM user_settings WHERE id=0),0),COALESCE((SELECT dont_show_again FROM user_settings WHERE id=0),0),?,?,?)''',
+                            (0, rss_url, download_directory, store_directory, anidb_username, anidb_password,sort_by_season,custom_icons,auto_hide_old,shanaproject_username,shanaproject_password))
         self.conn.commit()
 
     # returns a dict of all settings, keys are the full name of each setting, which can be used directly in a GUI.
     def getSettings(self,raw=False):
         if raw:
-            self.cursor.execute('''SELECT rss, dl_dir, st_dir, anidb_username, anidb_password, season_sort, custom_icons, auto_hide_old FROM user_settings WHERE id=0''')
+            self.cursor.execute('''SELECT rss, dl_dir, st_dir, anidb_username, anidb_password, season_sort, custom_icons, auto_hide_old, shanaproject_username, shanaproject_password FROM user_settings WHERE id=0''')
         else:
-            self.cursor.execute('''SELECT rss, expandvars(dl_dir), expandvars(st_dir), anidb_username, anidb_password, season_sort, custom_icons, auto_hide_old FROM user_settings WHERE id=0''')
+            self.cursor.execute('''SELECT rss, expandvars(dl_dir), expandvars(st_dir), anidb_username, anidb_password, season_sort, custom_icons, auto_hide_old, shanaproject_username, shanaproject_password FROM user_settings WHERE id=0''')
         settings = self.cursor.fetchone()
         if not settings:
             return None
         if settings[0] and settings[1] and settings[2]==None:
             return None
         #expand environment vars in the paths.
-        return dict(zip(['RSS Feed','Download Directory','Save Directory','anidb Username','anidb Password','Season Sort','Poster Icons','Auto Hide Old'],settings))
+        return dict(zip(['RSS Feed','Download Directory','Save Directory','anidb Username','anidb Password','Season Sort','Poster Icons','Auto Hide Old','Shana Project Username','Shana Project Password'],settings))
 
 ##    def addBadTorrent(self,url):
 ##        self.cursor.execute('''REPLACE INTO bad_torrents VALUES (?)''',(url,))
