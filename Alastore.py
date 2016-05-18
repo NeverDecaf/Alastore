@@ -1351,6 +1351,12 @@ ul { margin: 0; padding: 0; }
         added to your anidb mylist.
         
 </dd>
+<dt>Shana Project Username/Password:</dt><dd>
+        If you provide these, you will be given the option to drop a series, doing so will
+        automatically delete the associated Shana Project feed. You can also choose to delete
+        all downloaded episodes when you drop a series. (right-click to drop a series)
+        
+</dd>
 <dt>Removing Series/Marking as Watched:</dt>
         <dd>Right click any series to show a context menu with two options.</dd><ul>
         <li>If you choose to hide a series it will reappear if a new episode appears in your
@@ -1360,7 +1366,9 @@ ul { margin: 0; padding: 0; }
         been watched. The only reason to do this is if you have previously watched
         episodes elsewhere and you want Alastore to keep you up to date on the
         latest episode without having to download/watch the previous ones.
-        Note that there is (currently) no way to undo either of these actions.</li></ul>
+        Note that there is (currently) no way to undo either of these actions.</li>
+        <li>Two new options have been added, see ShanaProject username/password for info
+        on dropping a series.</li></ul>
 
 <dt>Tray Icon:</dt><dd>
         The refresh option checks your torrent folder and your RSS for any changes.
