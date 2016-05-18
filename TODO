@@ -1,4 +1,6 @@
 (Give the option to) delete torrent data for old/watched files. The full torrent file for each episode is stored in the db and pruning these would remove much of the overhead. Another space-saver would be to only store the last 1000 or so aids in your title db as alastore is meant for watching currently airing series which will always have more recent aids.
+- this could even be a checkbox in config like "Delete torrent data after successful download"
+Actually, don't even give the option. torrent data should just always be deleted. Can't think of a good reason to keep it there and it's just taking up tons of space (and memory).
 
 Deal with anidb adds that are never succesful. The problem is as follows:
 An OVA episode or a s2 episode is named something like anime_14 by a subgroup.
@@ -19,3 +21,11 @@ Features planned but never added:
 4. add an option to select a udp port (or just make sure the one you used isnt shared with other programs
 5. you can also add a right click option for series: "explorer here"
 6. If a rss fetch doesn't return any dupe entires, increase the &count to make sure you didn't miss any episodes (after a long vacation or something). This has never presented any issue even before the count option was added and even if you implement this feature it would not only require caching the rss feed in the db but would also only work on shanaproject feeds. In short, it's not worth doing. The easier fix of setting default count to 200 should work fine.
+
+heres the reasons:
+1. shouldn't happen.
+2. i think this actually is already implemented
+3. hasn't been an issue in a long time and can be maneuvered around by manually sending a new episode to rss from shanaproject's site. now that you have shana project integration this is more feasible though. and definitely more user-friendly than the alternative.
+4. this should be added.
+5. haven't felt as much need for this lately but it would be easy to add
+6. reason is already there.
