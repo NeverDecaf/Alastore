@@ -52,10 +52,6 @@ class ShanaLink:
             response = self.SESSION.get(url)
             etree = lxmlhtml.fromstring(response.text)
             follow_id = etree.xpath(match_name)
-            try:
-                url = urljoin(url, etree.xpath(next_page)[0])
-            except IndexError:
-                break
             if follow_id:
                 #do the delete
                 data = {
@@ -65,4 +61,8 @@ class ShanaLink:
                 response = self.SESSION.post(self.DELETE_URL, data=data, headers = dict(Referer=self.LIST_URL))
                 if response.text == 'ok':
                     return True
+            try:
+                url = urljoin(url, etree.xpath(next_page)[0])
+            except IndexError:
+                break
         return False
