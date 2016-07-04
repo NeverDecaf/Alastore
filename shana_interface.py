@@ -1,5 +1,6 @@
 from requests import session
 from lxml import html as lxmlhtml
+from urlparse import urljoin
 
 # defines several methods for interacting with your shanaproject mylist because there is no official api.
 class ShanaLink:
@@ -45,16 +46,23 @@ class ShanaLink:
             return False
         # generate an xpath to match the name of the follow:
         match_name = "//tr[td//text()='%s']/@id"%name
-        response = self.SESSION.get(self.LIST_URL)
-        etree = lxmlhtml.fromstring(response.text)
-        follow_id = etree.xpath(match_name)
-        if follow_id:
-            #do the delete
-            data = {
-                    'id': follow_id[0][3:],
-                    'csrfmiddlewaretoken': self.csrftoken,
-                    }
-            response = self.SESSION.post(self.DELETE_URL, data=data, headers = dict(Referer=self.LIST_URL))
-            if response.text == 'ok':
-                return True
+        next_page = "//div[@class='grid_2 list_next']//a/@href"
+        url = self.LIST_URL
+        while url:
+            response = self.SESSION.get(url)
+            etree = lxmlhtml.fromstring(response.text)
+            follow_id = etree.xpath(match_name)
+            try:
+                url = urljoin(url, etree.xpath(next_page)[0])
+            except IndexError:
+                break
+            if follow_id:
+                #do the delete
+                data = {
+                        'id': follow_id[0][3:],
+                        'csrfmiddlewaretoken': self.csrftoken,
+                        }
+                response = self.SESSION.post(self.DELETE_URL, data=data, headers = dict(Referer=self.LIST_URL))
+                if response.text == 'ok':
+                    return True
         return False
