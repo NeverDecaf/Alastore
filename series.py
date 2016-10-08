@@ -314,9 +314,15 @@ class SeriesList:
 
     def ihashFiles(self):
         '''hashes the selected files, also downloads poster art if applicable'''
+        hasherrors = 0
         for file in self.toHash.keys():
-            ed2k,filesize=anidb.anidbInterface.ed2k_hash(file)
-            self.toHash[file]=(ed2k,filesize)
+            try:
+                ed2k,filesize=anidb.anidbInterface.ed2k_hash(file)
+                self.toHash[file]=(ed2k,filesize)
+            except:
+                # if hashing fails on one file, we don't want to exclude the others.
+                hasherrors+=1
+        return hasherrors
             
     def prepHashFiles(self):
         self.toHash = self.SQL.getUnhashed()
