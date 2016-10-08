@@ -727,7 +727,7 @@ class AccordianWidget( QScrollArea ):
             self.thread = SingleCallThread(self.seriesManager.icheckFiles,self.lock,self)
             self.connect(self.thread, SIGNAL("finished()"), lambda:self.fileUpdateEnd(quick))
             try:
-                self._getUserSettings()
+                self.seriesManager._getUserSettings()
                 self.seriesManager._populateSeries()
                 self.seriesManager.prepCheckFiles()
 ##                self.seriesManager.phase2Prep(quick)
