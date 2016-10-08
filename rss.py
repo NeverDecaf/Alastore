@@ -4,7 +4,13 @@ import contextlib
 import socket
 import re
 import urlparse
-
+try:
+    # Python 2.6-2.7 
+    from HTMLParser import HTMLParser
+except ImportError:
+    # Python 3
+    from html.parser import HTMLParser
+htmlparser = HTMLParser()
 
 # IF YOU PLAN ON ADDING SUPPORT FOR A DIFFERENT RSS, READ THIS FIRST:
 # besides adding new entires to CLEANER and WEBSITE and INVALID_REPLACEMENT you must also make a new _getFilesXXXX method.
@@ -72,9 +78,9 @@ class RSSReader:
                 episodes=[]
                 for item in itemlist:
                     #this tuple is title, filename, torrent link
-                    episodes.append((item.childNodes[0].firstChild.nodeValue,
+                    episodes.append(map(htmlparser.unescape,(item.childNodes[0].firstChild.nodeValue,
                       item.childNodes[2].firstChild.nodeValue,
-                      self._stripAndEnforceSSL(item.childNodes[1].firstChild.nodeValue)))
+                      self._stripAndEnforceSSL(item.childNodes[1].firstChild.nodeValue))))
             return episodes
         except urllib2.URLError, e:
             print ("There was an error in rss.py: %r" % e)
