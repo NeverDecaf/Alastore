@@ -448,7 +448,8 @@ class SeriesList:
 
     def _getUserSettings(self):
         self.user_settings=self.SQL.getSettings()
-        self.SHANALINK.update_creds(self.user_settings['Shana Project Username'],self.user_settings['Shana Project Password'])
+        if self.user_settings:
+            self.SHANALINK.update_creds(self.user_settings['Shana Project Username'],self.user_settings['Shana Project Password'])
     # these are all the phases of an update. anything with Thread is meant to be time intensive
     # and should be run in a separate thread. the other functions should be very light and execute
     # instantaneously from a human viewpoint.
