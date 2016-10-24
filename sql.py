@@ -357,7 +357,8 @@ WHERE title=?""",title*6)
         will only hide older series if all episodes in that series are marked watched. if you're lagging behind on a series (or you dropped it) you can hide it manually with right-click.
         '''
         self.cursor.execute('''UPDATE shana_series SET hidden=1 WHERE (SELECT auto_hide_old FROM user_settings WHERE id=0)>0 AND last_update<strftime('%s', 'now')-?
-                                AND (SELECT COUNT(*) FROM episode_data WHERE shana_series.id=episode_data.id and watched=0)=0''',(LAST_UPDATE_TIME,))
+                                AND (SELECT COUNT(*) FROM episode_data WHERE shana_series.id=episode_data.id and watched=0)=0
+                                AND (SELECT COUNT(*) FROM episode_data WHERE shana_series.id=episode_data.id)>9''',(LAST_UPDATE_TIME,))
         self.conn.commit()
 
     def getUnhashed(self):
