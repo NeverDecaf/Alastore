@@ -11,7 +11,7 @@ except ImportError:
     # Python 3
     from html.parser import HTMLParser
 htmlparser = HTMLParser()
-
+IS_MAGNET = re.compile('^magnet\:.*')
 # IF YOU PLAN ON ADDING SUPPORT FOR A DIFFERENT RSS, READ THIS FIRST:
 # besides adding new entires to CLEANER and WEBSITE and INVALID_REPLACEMENT you must also make a new _getFilesXXXX method.
 # that should be all the changes required.
@@ -64,6 +64,8 @@ class RSSReader:
         return url
 
     def _stripAndEnforceSSL(self,url):
+        if IS_MAGNET.match(url):
+            return url
         if url:
             t = urlparse.urlsplit(url)
             return urlparse.urlunsplit(('https',)+t[1:3]+('',''))
@@ -109,4 +111,8 @@ class RSSReader:
         if self.source == 'shanaproject':
             return self._getFilesShanaproject(url,count)
         return self._getFilesGeneric(url,count)
+    
+if __name__=='__main__':
+    test = RSSReader('')
+    print test.getFiles()
     
