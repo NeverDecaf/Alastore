@@ -3,7 +3,7 @@
 '''
 Dependencies used in this project:
 https://pypi.python.org/pypi/BitTorrent-bencode v5.0.8.1
-https://pypi.python.org/pypi/python1-Levenshtein/ v0.10.2
+https://pypi.python.org/pypi/python-Levenshtein/ v0.10.2
 https://pypi.python.org/pypi/PIL/ v1.1.6
 https://pypi.python.org/pypi/PyQt4/ PyQt4-4.10-gpl-Py2.6-Qt4.8.4-x32
 
@@ -97,8 +97,8 @@ class AccordianItem( QGroupBox ):
                 # instead of a layout we position the widget manually. there were some issues on
                 # linux if this wasn't done.
                 self._widget.setParent(self)
-		wsize = widget.sizeHint()
-		self._widget.setGeometry(1+self.listPadding[0],self.itemHeight + 1 + self.listPadding[1],wsize.width()-2-self.listPadding[0]*2,wsize.height())
+                wsize = widget.sizeHint()
+                self._widget.setGeometry(1+self.listPadding[0],self.itemHeight + 1 + self.listPadding[1],wsize.width()-2-self.listPadding[0]*2,wsize.height())
  
         def accordianWidget( self ):
                 """
@@ -120,36 +120,36 @@ class AccordianItem( QGroupBox ):
         @pyqtSlot() 
         def hideSeries(self):
             if not QtGui.QMessageBox.warning(
-		self, "Hide Series?",
-		'''This series will be removed from this list until a new episode appears in your RSS.
+                self, "Hide Series?",
+                '''This series will be removed from this list until a new episode appears in your RSS.
 You cannot undo this action.
 Are you sure you wish to hide the series:
 "%s"'''%self._widget.title,
-		"&Yes", "&No", defaultButtonNumber=1, escapeButtonNumber=1 ):
+                "&Yes", "&No", defaultButtonNumber=1, escapeButtonNumber=1 ):
                 self._widget.hideSeries()
                 self._widget.refreshData()
         @pyqtSlot()
         def markWatched(self):
             if not QtGui.QMessageBox.warning(
-		self, "Mark Watched?",
-		'''This will mark every episode in this series "%s" as watched.
+                self, "Mark Watched?",
+                '''This will mark every episode in this series "%s" as watched.
 This includes files which have not yet been downloaded.
 Marking files watched this way will NOT add them to your mylist nor will it move
 and sort them. It will also render them incapable of being added or sorted in the future.
 Make sure you have watched every episode you mean to watch before doing this.
 Are you sure you wish to mark all episodes of %s as watched?
 (You cannot undo this action)'''%(self._widget.title,self._widget.title),
-		"&Yes", "&No", defaultButtonNumber=1, escapeButtonNumber=1 ):
+                "&Yes", "&No", defaultButtonNumber=1, escapeButtonNumber=1 ):
                     self._widget.markSeriesWatched()
                     self._widget.refreshData()
         @pyqtSlot()
         def markIndivWatched(self):
             if not QtGui.QMessageBox.warning(
-		self, "Mark Watched?",
-		'''Are you sure you want to force mark the file: %s as watched?
+                self, "Mark Watched?",
+                '''Are you sure you want to force mark the file: %s as watched?
 Force marking a file this way will NOT automatically sort/move the file and it will NEVER add the file to your mylist.
 You should only use this option if a file fails to download or is moved/deleted before you can watch it through Alastore.'''%(self._widget.selectedEpisodeName()),
-		"&Yes", "&No", defaultButtonNumber=1, escapeButtonNumber=1 ):
+                "&Yes", "&No", defaultButtonNumber=1, escapeButtonNumber=1 ):
                     self._widget.markEpisodeWatched()
                     self._widget.refreshData()
                     
@@ -330,21 +330,21 @@ You should only use this option if a file fails to download or is moved/deleted 
 ##                print 'normal:',super(AccordianItem,self).minimumSizeHint()
 ##                print 'bounded:',size
                 if not self._collapsed:
-		    listSize = self._widget.listWidget.sizeHint()
-		    listSize.setWidth(listSize.width() +2+self.listPadding[0]*2) #room for borders??
-		    return self._widget.listWidget.sizeHint().expandedTo(size)
-		return size
+                        listSize = self._widget.listWidget.sizeHint()
+                        listSize.setWidth(listSize.width() +2+self.listPadding[0]*2) #room for borders??
+                        return self._widget.listWidget.sizeHint().expandedTo(size)
+                return size
 ##                return super(AccordianItem,self).minimumSizeHint().expandedTo(size)
-	
-	def resizeEvent(self, event):
-		#self._widget.setMinimumWidth(self.rect().width()-8)
-		#print self.rect().width()
-		geometry = self._widget.geometry()
-		geometry.setWidth(self.rect().width()-2-self.listPadding[0]*2)
-##		geometry.setHeight(self.rect().height()+2+self.listPadding[1]*2)
-		self._widget.setGeometry(geometry)
-		#self._widget.setGeometry(2,22,self.rect().width()-20,self.rect().height())
-		
+        
+        def resizeEvent(self, event):
+                #self._widget.setMinimumWidth(self.rect().width()-8)
+                #print self.rect().width()
+                geometry = self._widget.geometry()
+                geometry.setWidth(self.rect().width()-2-self.listPadding[0]*2)
+##              geometry.setHeight(self.rect().height()+2+self.listPadding[1]*2)
+                self._widget.setGeometry(geometry)
+                #self._widget.setGeometry(2,22,self.rect().width()-20,self.rect().height())
+                
         def setCollapsed( self, state = True ):
                 if ( self.isCollapsible() ):
                         accord = self.accordianWidget()
@@ -918,7 +918,7 @@ class SeriesGui(QtGui.QWidget):
             if self.seriesManager.prepPlayAndSort()==-1:
                 QtGui.QMessageBox.information(self,
                         "No Settings Found!",
-			"Please fill out the required user settings\nbefore watching an episode.")
+                        "Please fill out the required user settings\nbefore watching an episode.")
             else:
                 'play the file in a separate thread to prevent ui lag.'
                 self.pthread = NonLockingCallThread(lambda:self.seriesManager.playAndSort(data),self.playEnd,item,self)
