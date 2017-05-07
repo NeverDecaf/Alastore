@@ -1,7 +1,59 @@
 import urllib2
 HEADERS={'User-Agent':'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.9.0.7) Gecko/2009021910 Firefox/3.0.7'} # we will now get a 403 without these, it might not be long before we need cookies too.
+# due to the nature of magnet links, the data may not always be available. therefore we must timeout eventually.
+MAGNET_TIMEOUT = 70 # in seconds
+import libtorrent as lt
+import tempfile
+import shutil
+from time import sleep
+ses = None
+def download_magnet(url):
+    global ses
+    tempdir = tempfile.mkdtemp()
+    if not ses:
+        ses = lt.session()
+    params = {
+        'save_path': tempdir,
+        'storage_mode': lt.storage_mode_t(2),
+        'paused': False,
+        'auto_managed': True,
+        'duplicate_is_error': True
+    }
+    handle = lt.add_magnet_uri(ses, url, params)
+
+    for i in range(MAGNET_TIMEOUT):
+        sleep(1)
+        if handle.has_metadata():
+            break
+    # if we timed out:
+    if not handle.has_metadata():
+        print("Could not create torrent from magnet")
+        handle.pause()
+        ses.remove_torrent(handle)
+##        del ses
+        shutil.rmtree(tempdir)
+        return None
+    handle.pause()
+
+    torinfo = handle.get_torrent_info()
+    torfile = lt.create_torrent(torinfo)
+    # are these 2 needed? not sure.
+    torfile.set_comment(torinfo.comment())
+    torfile.set_creator(torinfo.creator())
+
+    torcontent = lt.bencode(torfile.generate())
+    ses.remove_torrent(handle)
+##    del ses
+    shutil.rmtree(tempdir)
+    return torcontent
 
 def download_torrent(url):
+    if url.startswith('magnet:'):
+        try:
+            return download_magnet(url)
+        except Exception as e:
+            print ("There was an error downloading from the magnet link in torrentprogress.py: %r" % e)
+            return None
     request = urllib2.Request(url, headers=HEADERS)
     try:
         a=urllib2.urlopen(request)
