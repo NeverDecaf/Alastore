@@ -1,6 +1,6 @@
-#Alastore
+# Alastore
 
-####What is this?
+#### What is this?
 Alastore is a small program that makes it exceedingly easy to watch, organize, and track anime series you have downloaded through shanaproject.com RSS feeds. Alastore's GUI allows you to quickly see when new episodes are released and, with a double-click, the
 episode is automatically played, sorted into folders organized by year/season/series and (optionally) added to your anidb mylist.
 If you wish to see what this looks like, see "what is this.png"
@@ -8,7 +8,7 @@ Alastore is meant to be used alongside a torrent client set to automatically dow
 added a feature that lets you use deluge to sort your downloads so if that is all you are looking for that is likely a much
 better alternative.
 
-####Setup
+#### Setup
 Binaries are available if you are on windows, see [Releases](https://github.com/NeverDecaf/Alastore/releases/latest).
 
 The bare minimum setup:  
@@ -21,11 +21,11 @@ You can double-click the "header" of any series to watch the latest (unwatched) 
 
 Closing the main window will simply minimize it to tray. Double-click the icon to bring it back. Alastore is meant to run in the background and sit in your tray at all times. You can run it on startup with the -q switch to have it start minimized to tray.
 
-######A final warning(s):
+###### A final warning(s):
 * If you add a season 2 on shanaproject **make sure you delete your follow for season 1.** Following both will cause you to have duplicate episodes downloaded to your computer (this isn't an issue with alastore but one with Shanaproject; it can, however, cause issues with Alastore as well.) With regards to Alastore's anidb update feature, you will want to keep the s2 follow and remove the s1 follow to prevent potential failed mylist adds.
 * Functionality without a linked anidb account is completely untested. YMMV but it should work fairly well.
 
-####Extra Notes (for devs)
+#### Extra Notes (for devs)
 First, my apologies about the generally digusting and amateruish spaghetti code, I am not a professional.
 
 In theory Alastore should work in linux as it uses Qt but you may need to do some debugging to get UI elements like the tray icon to
