@@ -839,7 +839,7 @@ class SingleCallThread(QtCore.QThread):
             raise
 
 class NonLockingCallThread(QtCore.QThread):
-    finished = QtCore.pyqtSignal(object,object,QtGui.QListWidgetItem)
+    finished = QtCore.pyqtSignal(QtGui.QListWidgetItem,object,object,object,object)
     
     def __init__(self, method, callback, item, parent=None):
         QtCore.QThread.__init__(self, parent)
@@ -848,8 +848,8 @@ class NonLockingCallThread(QtCore.QThread):
         self.finished.connect(callback)
         
     def run(self):
-        r1,r2 = self.runmethod()
-        self.finished.emit(r1,r2,self.item)
+        res = self.runmethod()
+        self.finished.emit(self.item,*res)
 
 
 from PyQt4.QtCore import pyqtSlot,SIGNAL,SLOT
@@ -924,9 +924,9 @@ class SeriesGui(QtGui.QWidget):
                 self.pthread = NonLockingCallThread(lambda:self.seriesManager.playAndSort(data),self.playEnd,item,self)
                 self.pthread.start()
 
-    def playEnd(self,path,dest_file,item):
+    def playEnd(self,item,path,dest_file,ed2k,filesize):
         if path!='watched':
-            self.seriesManager.playAndSortFinalize(path,dest_file)
+            self.seriesManager.playAndSortFinalize(path,dest_file,ed2k,filesize)
             self.refreshData()
             self.colorize(item)
             

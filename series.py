@@ -256,21 +256,26 @@ class SeriesList:
             shutil.move(data['path'],dest_file)#.decode('utf8'),dest_file)
         self.watchfile(dest_file)
 ##        self.SQL.watchMoveQueue(data['path'],dest_file)
+
+        # we also want to get the ed2k hash asap in case you decide to drop the series right after watching an episode.
         try:
-            if season and self.user_settings['Season Sort']:
-                self.moveAllToFolder(data['id'], seasonsorted_folder)
-            else:
-                self.moveAllToFolder(data['id'], toplevel_folder)
+            ed2k,filesize=None,None
+            ed2k,filesize=anidb.anidbInterface.ed2k_hash(dest_file)
+        except Exception, e:
+            print 'Error hashing file in series.py %s; %r'%(dest_file,e)
+        return data['path'],dest_file,ed2k,filesize
+
+    def playAndSortFinalize(self,path,dest_file,ed2k,filesize):
+        self.SQL.watchMoveQueue(path,dest_file,ed2k,filesize)
+        try:
+            self.moveAllToFolder(dest_file)
         except Exception, e:
             print 'Unexpected error, moveAllToFolder @ series.py failed: %r'%e
-        return data['path'],dest_file
-
-    def playAndSortFinalize(self,path,dest_file):
-        self.SQL.watchMoveQueue(path,dest_file)
         self._populateSeries()
 
-    def moveAllToFolder(self, id, dest):
-        episodes = self.SQL.getAllWatchedPaths(id)
+    def moveAllToFolder(self, dest_path):
+        dest = os.path.dirname(dest_path)
+        episodes = self.SQL.getAllWatchedPaths(dest)
         for episode in episodes:
             path = episode[0]
             directory = os.path.dirname(path)

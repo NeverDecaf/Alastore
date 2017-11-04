@@ -149,9 +149,9 @@ class SQLManager:
 ##        self.cursor.execute('''REPLACE INTO bad_torrents VALUES (?)''',(url,))
 ##        self.conn.commit()
     
-    def watchMoveQueue(self,source_path,dest_path):
+    def watchMoveQueue(self,source_path,dest_path,ed2k,filesize):
         self.cursor.execute('''UPDATE episode_data SET watched=1,path=? WHERE path=?''',(dest_path,source_path))
-        self.cursor.execute('''REPLACE INTO parse_data (path,id,episode,subgroup) SELECT path,id,episode,subgroup FROM episode_data WHERE path=? LIMIT 1''',(dest_path,))
+        self.cursor.execute('''REPLACE INTO parse_data (path,id,episode,subgroup,ed2k,filesize) SELECT path,id,episode,subgroup,?,? FROM episode_data WHERE path=? LIMIT 1''',(ed2k,filesize,dest_path))
         self.conn.commit()
     
 ##    def queueFile(self,path):
@@ -313,9 +313,10 @@ WHERE title=?""",title*6)
 ##        self.cursor.execute('''UPDATE episode_data SET watched=1 WHERE path=?''',(path,))
 ##        self.conn.commit()
 
-    def getAllWatchedPaths(self,id):
-        '''gets a list of paths for all watched files/episodes for series with given id'''
-        self.cursor.execute('''SELECT path from episode_data WHERE id=? AND watched=1 AND downloaded=1''',(id,))
+    def getAllWatchedPaths(self,path):
+        '''gets a list of paths for all watched files/episodes for series matching the given filepath'''
+##        self.cursor.execute('''SELECT path from episode_data WHERE id=? AND watched=1 AND downloaded=1''',(id,))
+        self.cursor.execute('''SELECT path from episode_data WHERE id=(SELECT id FROM episode_data WHERE path=? LIMIT 1) AND watched=1 AND downloaded=1''',(path,))
         return self.cursor.fetchall()
 
     def getAllPaths(self,title):
