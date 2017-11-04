@@ -227,7 +227,7 @@ class SeriesList:
     def playAndSort(self,data):
         if data['watched']:
             self.watchfile(data['path'])#.decode('utf8'))
-            return 'watched','watched'
+            return ('watched',)*4
         import shutil
         shana_title = data['title']#self.SQL.getSeriesTitle(data['id'])#.decode('utf8')
         st_dir = self.user_settings['Save Directory']#.decode('utf8')
