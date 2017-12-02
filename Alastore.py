@@ -42,7 +42,8 @@ COLORSCHEME = {'background': QtGui.QColor(255,255,255),#
                'forcewatchedfg':QtGui.QColor(180,55,55),
                }
 from PyQt4.QtGui import QGroupBox
- 
+from Queue import Queue
+from PyQt4.QtCore import Qt
 class AccordianItem( QGroupBox ):
 
 
@@ -838,19 +839,22 @@ class SingleCallThread(QtCore.QThread):
             self.lock.unlock()
             raise
 
-class NonLockingCallThread(QtCore.QThread):
-    finished = QtCore.pyqtSignal(QtGui.QListWidgetItem,object,object,object,object)
-    
-    def __init__(self, method, callback, item, parent=None):
+class PlayandSortThread(QtCore.QThread):
+    def __init__(self, seriesManager, queue, finished, parent=None):
         QtCore.QThread.__init__(self, parent)
-        self.runmethod = method
-        self.item=item
-        self.finished.connect(callback)
+        self.queue = queue
+        self.series=seriesManager
+        self.finished=finished
         
     def run(self):
-        res = self.runmethod()
-        self.finished.emit(self.item,*res)
-
+        while True:
+            try:
+                item = self.queue.get()
+                data = item.data(Qt.UserRole).toPyObject()[0]
+                res = self.series.playAndSort(data)
+                self.finished.emit(item,*res)
+            except Exception as e:
+                print 'Error in playQueue: %r'%e
 
 from PyQt4.QtCore import pyqtSlot,SIGNAL,SLOT
 
@@ -881,7 +885,7 @@ class myListWidget(QtGui.QListWidget):
 
         
 class SeriesGui(QtGui.QWidget):
-
+    playSignal = QtCore.pyqtSignal(QtGui.QListWidgetItem,object,object,object,object)
     #data wont be none in the final release
     def __init__(self,parent,data,seriesManager,title):
         QtGui.QWidget.__init__(self, parent)
@@ -893,6 +897,10 @@ class SeriesGui(QtGui.QWidget):
         self.latestDownloaded=None
         self.downloadPercent=None
         self.seriesManager=seriesManager
+        self.playQueue = Queue()
+        self.playSignal.connect(self.playEnd)
+        self.playThread = PlayandSortThread(self.seriesManager, self.playQueue, self.playSignal)
+        self.playThread.start()
         self.layout = QtGui.QVBoxLayout(self)
         self.layout.setSpacing( 0 )
         self.layout.setContentsMargins(0,0,0,0)
@@ -912,7 +920,6 @@ class SeriesGui(QtGui.QWidget):
         self.play(item)
 
     def play(self,item):
-        from PyQt4.QtCore import Qt
         data = item.data(Qt.UserRole).toPyObject()[0]
         if data['downloaded']>0:
             if self.seriesManager.prepPlayAndSort()==-1:
@@ -921,8 +928,7 @@ class SeriesGui(QtGui.QWidget):
                         "Please fill out the required user settings\nbefore watching an episode.")
             else:
                 'play the file in a separate thread to prevent ui lag.'
-                self.pthread = NonLockingCallThread(lambda:self.seriesManager.playAndSort(data),self.playEnd,item,self)
-                self.pthread.start()
+                self.playQueue.put(item)
 
     def playEnd(self,item,path,dest_file,ed2k,filesize):
         if path!='watched':
