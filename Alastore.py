@@ -839,23 +839,6 @@ class SingleCallThread(QtCore.QThread):
             self.lock.unlock()
             raise
 
-class PlayandSortThread(QtCore.QThread):
-    def __init__(self, seriesManager, queue, finished, parent=None):
-        QtCore.QThread.__init__(self, parent)
-        self.queue = queue
-        self.series=seriesManager
-        self.finished=finished
-        
-    def run(self):
-        while True:
-            try:
-                item = self.queue.get()
-                data = item.data(Qt.UserRole).toPyObject()[0]
-                res = self.series.playAndSort(data)
-                self.finished.emit(item,*res)
-            except Exception as e:
-                print 'Error in playQueue: %r'%e
-
 from PyQt4.QtCore import pyqtSlot,SIGNAL,SLOT
 
 class myListWidget(QtGui.QListWidget):
@@ -886,6 +869,7 @@ class myListWidget(QtGui.QListWidget):
         
 class SeriesGui(QtGui.QWidget):
     playSignal = QtCore.pyqtSignal(QtGui.QListWidgetItem,object,object,object,object)
+    dropSignal = QtCore.pyqtSignal(object,object)
     #data wont be none in the final release
     def __init__(self,parent,data,seriesManager,title):
         QtGui.QWidget.__init__(self, parent)
@@ -897,10 +881,17 @@ class SeriesGui(QtGui.QWidget):
         self.latestDownloaded=None
         self.downloadPercent=None
         self.seriesManager=seriesManager
+        
+        self.dropQueue = Queue()
+        self.dropSignal.connect(self.dropComplete)
+        self.dropThread = self.DropThread(self.seriesManager, self.dropQueue, self.dropSignal)
+        self.dropThread.start()
+        
         self.playQueue = Queue()
         self.playSignal.connect(self.playEnd)
-        self.playThread = PlayandSortThread(self.seriesManager, self.playQueue, self.playSignal)
+        self.playThread = self.PlayandSortThread(self.seriesManager, self.playQueue, self.playSignal)
         self.playThread.start()
+        
         self.layout = QtGui.QVBoxLayout(self)
         self.layout.setSpacing( 0 )
         self.layout.setContentsMargins(0,0,0,0)
@@ -1033,8 +1024,7 @@ class SeriesGui(QtGui.QWidget):
         self.seriesManager.SQL.hideSeries(self.title)
 
     def dropSeries(self,delete):
-        dropthread = self.DropThread(lambda:self.seriesManager.SHANALINK.delete_follow(self.title), self.dropComplete, delete, self)
-        dropthread.start()
+        self.dropQueue.put((self.title,delete))
 
     def dropComplete(self, success, delete):
         if success:
@@ -1042,19 +1032,6 @@ class SeriesGui(QtGui.QWidget):
             self.refreshData()
         else:
             QtGui.QMessageBox.information(self,'Drop Failed','Could not connect to Shana Project to drop %s, check your login credentials and internet connection.'%self.title)
-        
-    class DropThread(QtCore.QThread):
-            finished = QtCore.pyqtSignal(object,object)
-    
-            def __init__(self, method, callback, delete, parent=None):
-                QtCore.QThread.__init__(self, parent)
-                self.runmethod = method
-                self.delete = delete
-                self.finished.connect(callback)
-                
-            def run(self):
-                success = self.runmethod()
-                self.finished.emit(success, self.delete)
 
     def setTitle(self):
         if self.series:
@@ -1067,6 +1044,40 @@ class SeriesGui(QtGui.QWidget):
             else:
                 self.series.setTitle(self.title)
             self.series.setStatus(self.latestDownloaded,self.downloading,self.downloadPercent)
+
+    class DropThread(QtCore.QThread):
+            def __init__(self, seriesManager, queue, finished, parent=None):
+                QtCore.QThread.__init__(self, parent)
+                self.queue = queue
+                self.series=seriesManager
+                self.finished=finished
+                
+            def run(self):
+                while True:
+                    try:
+                        title,delete = self.queue.get()
+                        success = self.series.SHANALINK.delete_follow(title)
+                        self.finished.emit(success, delete)
+                    except Exception as e:
+                        print 'Error dropping series: %r'%e
+                
+    class PlayandSortThread(QtCore.QThread):
+        def __init__(self, seriesManager, queue, finished, parent=None):
+            QtCore.QThread.__init__(self, parent)
+            self.queue = queue
+            self.series=seriesManager
+            self.finished=finished
+            
+        def run(self):
+            while True:
+                try:
+                    item = self.queue.get()
+                    data = item.data(Qt.UserRole).toPyObject()[0]
+                    res = self.series.playAndSort(data)
+                    self.finished.emit(item,*res)
+                except Exception as e:
+                    print 'Error in playQueue: %r'%e
+
             
 class SettingsDialog(QtGui.QDialog):
     def __init__(self,initialSettings, parent=None):
