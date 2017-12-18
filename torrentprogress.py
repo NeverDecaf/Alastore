@@ -6,6 +6,7 @@ import libtorrent as lt
 import tempfile
 import shutil
 from time import sleep
+import socket
 ses = None
 def download_magnet(url):
     global ses
