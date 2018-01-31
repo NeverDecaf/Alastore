@@ -1,13 +1,15 @@
 #! /usr/bin/env python
 import sys
-from PyQt4 import QtGui, QtCore
-from PyQt4.QtCore import *
+
+from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5.QtCore import *
+
 '''
 to use a tray icon just copy the main method.
 For your main window you must subclass HideableWindow
 then subclass systray and redefine createActions if you wish
 '''
-class HideableWindow(QtGui.QMainWindow):
+class HideableWindow(QtWidgets.QMainWindow):
     def __init__(self,parent=None):
                 super(HideableWindow,self).__init__(parent)
                 self.geometry=None
@@ -30,6 +32,7 @@ class HideableWindow(QtGui.QMainWindow):
             self.restoreGeometry(self.geometry)
             self.restoreState(self.state) # restore state second to avoid flashing
 import os
+
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
     try:
@@ -40,34 +43,34 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 
-class HelloWindow(QtGui.QMainWindow):
+class HelloWindow(QtWidgets.QMainWindow):
 
 	def __init__(self, win_parent = None):
 		#Init the base class
-		QtGui.QMainWindow.__init__(self, win_parent)
+		QtWidgets.QMainWindow.__init__(self, win_parent)
 		self.create_widgets()
 
 	def create_widgets(self):
 		#Widgets
-		self.label = QtGui.QLabel("Say hello:")
-		self.hello_edit = QtGui.QLineEdit()
-		self.hello_button = QtGui.QPushButton("Push Me!")
+		self.label = QtWidgets.QLabel("Say hello:")
+		self.hello_edit = QtWidgets.QLineEdit()
+		self.hello_button = QtWidgets.QPushButton("Push Me!")
 		#Horizontal layout
-		h_box = QtGui.QHBoxLayout()
+		h_box = QtWidgets.QHBoxLayout()
 		h_box.addWidget(self.label)
 		h_box.addWidget(self.hello_edit)
 		h_box.addWidget(self.hello_button)
 		#Create central widget, add layout and set
-		central_widget = QtGui.QWidget()
+		central_widget = QtWidgets.QWidget()
 		central_widget.setLayout(h_box)
 		self.setCentralWidget(central_widget)
 	def closeEvent(self,event):
             self.hide()
             event.ignore()
 		
-class Systray(QtGui.QWidget):
+class Systray(QtWidgets.QWidget):
     def __init__(self,main_window):
-        QtGui.QWidget.__init__(self)
+        QtWidgets.QWidget.__init__(self)
         
         self.main_window=main_window
         
@@ -78,22 +81,21 @@ class Systray(QtGui.QWidget):
 
     def createActions(self):
         self.actions=[]
-        self.quitAction = QtGui.QAction(self.tr("&Quit"), self)
-        QtCore.QObject.connect(self.quitAction, QtCore.SIGNAL("triggered()"),
-        QtGui.qApp, QtCore.SLOT("quit()"))
+        self.quitAction = QtWidgets.QAction(self.tr("&Quit"), self)
+        self.quitAction.triggered.connect(QtWidgets.QApplication.quit)
         self.actions.append(self.quitAction)
 
     def createTrayIcon(self):
-        self.trayIconMenu = QtGui.QMenu(self)
+        self.trayIconMenu = QtWidgets.QMenu(self)
         for action in self.actions:
                 self.trayIconMenu.addAction(action)
 
-        self.trayIcon = QtGui.QSystemTrayIcon(QtGui.QIcon(resource_path("book.ico")), self)#was (self)
+        self.trayIcon = QtWidgets.QSystemTrayIcon(QtGui.QIcon(resource_path("book.ico")), self)#was (self)
         self.trayIcon.setContextMenu(self.trayIconMenu)
         self.trayIcon.activated.connect(self.click_trap)
         
     def click_trap(self, value):
-        if value == QtGui.QSystemTrayIcon.DoubleClick: 
+        if value == QtWidgets.QSystemTrayIcon.DoubleClick: 
             self.main_window.showNormal()
 ##            if self.main_window.windowState() == Qt.WindowMinimized:
 ##                    self.main_window.showNormal()
@@ -102,7 +104,7 @@ class Systray(QtGui.QWidget):
             self.main_window.activateWindow()
 
 if __name__=='__main__':
-    app = QtGui.QApplication(sys.argv)
+    app = QtWidgets.QApplication(sys.argv)
     main_window = HelloWindow()#should be HideableWindow()
     x = Systray(main_window)
     main_window.show()
