@@ -93,15 +93,26 @@ class AccordianItem( QGroupBox ):
 
 
                 self.contextMenu=QtWidgets.QMenu()
-                self.contextMenu.addAction("&Hide Series", self, SLOT('hideSeries()'))
+                hideaction = QtWidgets.QAction(self.tr("&Hide Series"), self)
+                hideaction.triggered.connect(self.hideSeries)
+                self.contextMenu.addAction(hideaction)
+##                self.contextMenu.addAction("&Hide Series", self, SLOT('hideSeries()'))
+                allwatchedaction = QtWidgets.QAction(self.tr("&Mark All Watched"), self)
+                allwatchedaction.triggered.connect(self.markWatched)
+                self.contextMenu.addAction(allwatchedaction)
+##                self.contextMenu.addAction("&Mark All Watched", self, SLOT('markWatched()'))
 
-                self.contextMenu.addAction("&Mark All Watched", self, SLOT('markWatched()'))
+                self.markWatchedAction = QtWidgets.QAction(self.tr("&Mark Episode Watched"), self)
+                self.markWatchedAction.triggered.connect(self.markIndivWatched)
+                self.contextMenu.addAction(self.markWatchedAction)
+##                self.markWatchedAction = self.contextMenu.addAction("&Mark Episode Watched", self, SLOT('markIndivWatched()'))
 
-                self.markWatchedAction = self.contextMenu.addAction("&Mark Episode Watched", self, SLOT('markIndivWatched()'))
-
-                self.dropAction = self.contextMenu.addAction("&Drop Series", self, SLOT('dropSeries()'))
+                self.dropAction = QtWidgets.QAction(self.tr("&Drop Series"), self)
+                self.dropAction.triggered.connect(self.dropSeries)
+                self.contextMenu.addAction(self.dropAction)
+##                self.dropAction = self.contextMenu.addAction("&Drop Series", self, SLOT('dropSeries()'))
                 
-                self.customContextMenuRequested[QPoint].connect(self.execContextMenu)
+                self.customContextMenuRequested[QtCore.QPoint].connect(self.execContextMenu)
 
                 # instead of a layout we position the widget manually. there were some issues on
                 # linux if this wasn't done.
@@ -928,7 +939,7 @@ class SeriesGui(QtWidgets.QWidget):
         self.layout.setContentsMargins(0,0,0,0)
         self.listWidget= myListWidget()#QtWidgets.QListWidget()
         self.listWidget.setFrameStyle(0)
-        self.listWidget.itemDoubleClicked[QListWidgetItem].connect(self.doubleClickedSlot)
+        self.listWidget.itemDoubleClicked[QtWidgets.QListWidgetItem].connect(self.doubleClickedSlot)
         self.layout.addWidget(self.listWidget)
 ##        GroupBox.setWindowTitle(QtGui.QApplication.translate("GroupBox", "GroupBox", None, QtGui.QApplication.UnicodeUTF8))
 ##        return self

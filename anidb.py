@@ -187,7 +187,7 @@ class anidbInterface:
             hashes = [md4_hash(data).digest() for data in a]
             if len(hashes) == 1:
                 md4 = hashes[0].encode("hex")
-            else: md4 = md4_hash(reduce(lambda a,d: a + d, hashes, "")).hexdigest()
+            else: md4 = md4_hash(reduce(lambda a,d: a + d, hashes, b'')).hexdigest()
             f.close()
             
         return 'ed2k://|file|'+os.path.basename(file_path)+'|'\
@@ -203,9 +203,9 @@ class anidbInterface:
             return None
         '''auths with anidb using passed credentials and socket. returns None on failure.'''
         data = 'AUTH user='+USERNAME+'&pass='+PASSWORD+'&protover=3&client=%s&clientver=%s'%(UDPCLIENT,UDPCLIENTVER)
-        self.socket.sendall(data)
+        self.socket.sendall(data.encode('utf8'))
         
-        buf = self.socket.recv(2048)
+        buf = self.socket.recv(2048).decode('utf8')
         time.sleep(2)
         if str(buf).split(' ')[0] != '200':
             return None
@@ -220,9 +220,9 @@ class anidbInterface:
         ed2k=full_ed2k.split('|')[4]
         filesize=full_ed2k.split('|')[3]
         data = 'MYLISTADD size='+str(filesize)+'&ed2k='+ed2k+'&state='+str(self.STATE)+'&viewed='+str(self.VIEWED)+'&s='+self.SK
-        self.socket.sendall(data)
+        self.socket.sendall(data.encode('utf8'))
         
-        buf = self.socket.recv(2048)
+        buf = self.socket.recv(2048).decode('utf8')
         time.sleep(2)
         if str(buf).split(' ')[0] =='320':
             if aid:
@@ -259,9 +259,9 @@ class anidbInterface:
     def _check_exists(self,aid,epno):
         '''Checks for a file by aid and episode number. used to verify generic adds.'''
         data = 'MYLIST aid='+str(aid)+'&epno='+str(epno)+'&s='+self.SK
-        self.socket.sendall(data)
+        self.socket.sendall(data.encode('utf8'))
         
-        buf = self.socket.recv(2048)
+        buf = self.socket.recv(2048).decode('utf8')
         time.sleep(2)
         return str(buf).split(' ')[0] !='321' # 321 is the code for NO SUCH ENTRY
         
@@ -271,9 +271,9 @@ class anidbInterface:
     def _get_aid(self,lid):
         '''Retreives the aid for the file in mylist referenced by list id.'''
         data = 'MYLIST lid='+str(lid)+'&s='+self.SK
-        self.socket.sendall(data)
+        self.socket.sendall(data.encode('utf8'))
         
-        buf = self.socket.recv(2048)
+        buf = self.socket.recv(2048).decode('utf8')
         time.sleep(2)
         if str(buf).split(' ')[0] =='221':
             #{int4 lid}|{int4 fid}|{int4 eid}|{int4 aid}|{int4 gid}|{int4 date}|{int2 state}|{int4 viewdate}|{str storage}|{str source}|{str other}|{int2 filestate}
@@ -304,9 +304,9 @@ class anidbInterface:
 ##        'try to do a group name add first'
         if group:
             data = 'MYLISTADD aid='+str(aid)+'&gname='+str(group)+'&epno='+str(epno)+'&state='+str(self.STATE)+'&viewed='+str(self.VIEWED)+'&s='+self.SK
-            self.socket.sendall(data)
+            self.socket.sendall(data.encode('utf8'))
             
-            buf = self.socket.recv(2048)
+            buf = self.socket.recv(2048).decode('utf8')
             if DEBUG_ADD_CHAIN:
                     print('result of generic add(1):',buf)
             time.sleep(2)
@@ -323,9 +323,9 @@ class anidbInterface:
 
         if DEBUG_ADD_CHAIN:
             print('attempting generic add (w/o gname)')
-        self.socket.sendall(data)
+        self.socket.sendall(data.encode('utf8'))
         
-        buf = self.socket.recv(2048)
+        buf = self.socket.recv(2048).decode('utf8')
         time.sleep(2)
         if DEBUG_ADD_CHAIN:
                 print('result of generic add(2):',buf)
@@ -342,8 +342,8 @@ class anidbInterface:
         '''Log out of mylist'''
         data = 'LOGOUT s='+self.SK
         self.SK=None
-        self.socket.sendall(data)
-        buf = self.socket.recv(2048)
+        self.socket.sendall(data.encode('utf8'))
+        buf = self.socket.recv(2048).decode('utf8')
         if str(buf).split(' ')[0] =='203':
             return 1 # success
         return None
@@ -353,9 +353,5 @@ class anidbInterface:
             return None
         self.socket.close()
         self.socket=None
+        
 
-
-
-
-
-    
