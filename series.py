@@ -8,13 +8,13 @@ import sql
 import rss
 import os
 import anidb
+from functools import reduce
 if os.name=='nt':
     import makeico
 import re
 import torrentprogress
-import StringIO
+import io
 import shutil
-from bencode import BTFailure
 import logging
 import errno
 from shana_interface import ShanaLink
@@ -29,7 +29,7 @@ class SeriesList:
         if os.path.exists('DEBUG_TEST'):
             logging.basicConfig(level=logging.DEBUG, filename='DEBUG.log')
         else:
-            logging.basicConfig(level=logging.DEBUG, stream=StringIO.StringIO())
+            logging.basicConfig(level=logging.DEBUG, stream=io.StringIO())
             logging.disable(logging.DEBUG)
         self.SQL=sql.SQLManager()
         self.SQL.connect()
@@ -60,13 +60,12 @@ class SeriesList:
             if torrent:
                 torrentdata=buffer(torrent)
                 try:
-                    filename = torrentprogress.file_name(StringIO.StringIO(torrentdata))
-                except BTFailure,e:
-                    print 'initial bencode failed %r'%e
-                    if str(e)=='not a valid bencoded string' or str(e)=='torrent contains multiple files':
-                        print 'pre-removing %s.'%entry[1]
-                        self.removeInvalidTorrents.append((entry[2],len(torrentdata)))
-                        continue
+                    filename = torrentprogress.file_name(io.StringIO(torrentdata))
+                except e:
+                    print('initial bencode failed %r'%e)
+                    print('pre-removing %s.'%entry[1])
+                    self.removeInvalidTorrents.append((entry[2],len(torrentdata)))
+                    continue
                 path = os.path.join(self.user_settings['Download Directory'],filename)
                 self.torrentDatum.append((path,entry[2],torrentdata,filename))
             
@@ -117,10 +116,10 @@ class SeriesList:
 ##        potentialFiles=os.listdir(dl_dir)
         # we replace space with _ here, make sure to do this to all the strings you want to match.
         originalFiles = os.listdir(dl_dir)
-        potentialFiles = map(lambda x: re.sub(ur'[ ]',ur'_',x), originalFiles)
-        potentialMatches = dict(zip(potentialFiles,originalFiles))
+        potentialFiles = [re.sub(r'[ ]',r'_',x) for x in originalFiles]
+        potentialMatches = dict(list(zip(potentialFiles,originalFiles)))
 ##        contString=u'\n'.join(potentialFiles)+u'\n'
-        for series in self.series.values():
+        for series in list(self.series.values()):
             for episode in series:
                 # narrow the search to undownloaded, unwatched series to save time. (also you can ignore hidden series)
                 if episode['downloaded']==0 and episode['watched']==0 and episode['hidden']==0:
@@ -154,11 +153,11 @@ class SeriesList:
 ##                            if match.group(2):
 ##                                path = path+match.group(2)
                             try:
-                                percent_downloaded, torrentdata=torrentprogress.percentCompleted(StringIO.StringIO(torrentdata),path)
-                            except BTFailure,e:
-                                print 'bencode failed %r'%e
-                                if str(e)=='not a valid bencoded string' and len(torrentdata):
-                                    print 'episode (%s) was removed.'%episode['display_name']
+                                percent_downloaded, torrentdata=torrentprogress.percentCompleted(io.StringIO(torrentdata),path)
+                            except e:
+                                print('bencode failed %r'%e)
+                                if len(torrentdata):
+                                    print('episode (%s) was removed.'%episode['display_name'])
                                     self.removeInvalid.append(episode['torrent_url'])
                                     continue
                                 
@@ -231,7 +230,7 @@ class SeriesList:
         import shutil
         shana_title = data['title']#self.SQL.getSeriesTitle(data['id'])#.decode('utf8')
         st_dir = self.user_settings['Save Directory']#.decode('utf8')
-        folder_title = ur''.join(i for i in shana_title if i not in ur'\/:*?"<>|.')
+        folder_title = r''.join(i for i in shana_title if i not in r'\/:*?"<>|.')
 
         # check usersettings for usesubfolders.
         # if true/false move existing files from one to the other
@@ -261,16 +260,16 @@ class SeriesList:
         try:
             ed2k,filesize=None,None
             ed2k,filesize=anidb.anidbInterface.ed2k_hash(dest_file)
-        except Exception, e:
-            print 'Error hashing file in series.py %s; %r'%(dest_file,e)
+        except Exception as e:
+            print('Error hashing file in series.py %s; %r'%(dest_file,e))
         return data['path'],dest_file,ed2k,filesize
 
     def playAndSortFinalize(self,path,dest_file,ed2k,filesize):
         self.SQL.watchMoveQueue(path,dest_file,ed2k,filesize)
         try:
             self.moveAllToFolder(dest_file)
-        except Exception, e:
-            print 'Unexpected error, moveAllToFolder @ series.py failed: %r'%e
+        except Exception as e:
+            print('Unexpected error, moveAllToFolder @ series.py failed: %r'%e)
         self._populateSeries()
 
     def moveAllToFolder(self, dest_path):
@@ -285,8 +284,8 @@ class SeriesList:
                 try:
                     shutil.move(path,destfile)
                     self.SQL.changePath(path,destfile)
-                except IOError,e:
-                    print 'failed to move file: %r'%e
+                except IOError as e:
+                    print('failed to move file: %r'%e)
                 self.cleanFolder(directory)
 
     # BE VERY CAREFUL WITH THIS.
@@ -320,7 +319,7 @@ class SeriesList:
     def ihashFiles(self):
         '''hashes the selected files, also downloads poster art if applicable'''
         hasherrors = 0
-        for file in self.toHash.keys():
+        for file in list(self.toHash.keys()):
             try:
                 ed2k,filesize=anidb.anidbInterface.ed2k_hash(file)
                 self.toHash[file]=(ed2k,filesize)
@@ -341,17 +340,17 @@ class SeriesList:
         if not self.user_settings:
             return -1
         for aid,title,season,imgurl,nochange in self.newIcons:
-            folder_title = ur''.join(i for i in title if i not in ur'\/:*?"<>|.')
+            folder_title = r''.join(i for i in title if i not in r'\/:*?"<>|.')
             dest_folder = os.path.join(self.user_settings['Save Directory'],folder_title)
             if self.user_settings['Season Sort'] and season:
                 year = season.split()[1]
                 dest_folder = os.path.join(self.user_settings['Save Directory'],year,season,folder_title)
             try:
                 try:
-                    if aid and os.path.exists(dest_folder) and (not os.path.exists(os.path.join(dest_folder,u'%i.ico'%aid)) or not nochange):
+                    if aid and os.path.exists(dest_folder) and (not os.path.exists(os.path.join(dest_folder,'%i.ico'%aid)) or not nochange):
                         makeico.makeIcon(aid,imgurl,dest_folder)
                     self.successfulIcons.append((aid,imgurl))
-                except IOError,e:
+                except IOError as e:
                     if e.errno!=errno.ENOENT:
                         raise
                     else:
@@ -359,8 +358,8 @@ class SeriesList:
                         this simply means you tried to get poster art before any episodes were downloaded.
                         we will just try to get the art again at a later date'''
                         self.successfulIcons.append((aid,None))
-            except Exception, e:
-                print 'failed to download series image for %s b/c %r'%(title,e)
+            except Exception as e:
+                print('failed to download series image for %s b/c %r'%(title,e))
                 self.successfulIcons.append((aid,None))
         
     def prepMakeIcon(self):
@@ -431,8 +430,8 @@ class SeriesList:
                 seasonname= '%s %s'%(SEASONS[seasonindex],date.strftime('%Y'))
 
                 self.toGetSeriesInfoAdds.append((aid,airdate,seasonname,imgurl))
-            except Exception, e:
-                print 'anidb_series_info failed on %s b/c %r'%(aid,e)
+            except Exception as e:
+                print('anidb_series_info failed on %s b/c %r'%(aid,e))
                 self.toGetSeriesInfoFailedAdds.append(aid)
                 
     def prepGetSeriesInfo(self):

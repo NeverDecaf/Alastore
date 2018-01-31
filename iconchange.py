@@ -56,11 +56,11 @@ def seticon(folderpath, iconpath, iconindex, relative=1):
     """
     shell32 = ctypes.windll.shell32
 
-    folderpath = unicode(os.path.abspath(folderpath), 'mbcs')
+    folderpath = str(os.path.abspath(folderpath), 'mbcs')
     if relative:
-        iconpath = unicode(os.path.join('.',os.path.basename(iconpath)), 'mbcs')
+        iconpath = str(os.path.join('.',os.path.basename(iconpath)), 'mbcs')
     else:
-        iconpath = unicode(os.path.abspath(iconpath), 'mbcs')
+        iconpath = str(os.path.abspath(iconpath), 'mbcs')
     
     fcs = SHFOLDERCUSTOMSETTINGS()
     fcs.dwSize = sizeof(fcs)

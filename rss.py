@@ -1,12 +1,12 @@
 from xml.dom import minidom
-import urllib2
+import urllib.request, urllib.error, urllib.parse
 import contextlib
 import socket
 import re
-import urlparse
+import urllib.parse
 try:
     # Python 2.6-2.7 
-    from HTMLParser import HTMLParser
+    from html.parser import HTMLParser
 except ImportError:
     # Python 3
     from html.parser import HTMLParser
@@ -33,8 +33,8 @@ class RSSReader:
     # This is the character the RSS source uses to replace invalid filename characters [\/:*?"<>| ]
     # you will need to find a file that contains one of these invalid characters to find out what it is.
     # don't forget the ur as paths are unicode, leaving this out may break the whole program.
-    INVALID_REPLACEMENT = {'unknown':(ur'[\/:*?"<>| ]',ur'.'),
-                           'shanaproject':(ur'[\/:*?"<>| ]',ur'_'),
+    INVALID_REPLACEMENT = {'unknown':(r'[\/:*?"<>| ]',r'.'),
+                           'shanaproject':(r'[\/:*?"<>| ]',r'_'),
                            }
     
     def __init__(self,url=None):
@@ -58,36 +58,36 @@ class RSSReader:
             for site in RSSReader.WEBSITE:
                 if site in url:
                     source = RSSReader.WEBSITE[site]
-            t = urlparse.urlsplit(url)
+            t = urllib.parse.urlsplit(url)
             combo = [x if x is not None else t[i] for i,x in enumerate(RSSReader.CLEANER[source])]
-            return urlparse.urlunsplit(combo)
+            return urllib.parse.urlunsplit(combo)
         return url
 
     def _stripAndEnforceSSL(self,url):
         if IS_MAGNET.match(url):
             return url
         if url:
-            t = urlparse.urlsplit(url)
-            return urlparse.urlunsplit(('https',)+t[1:3]+('',''))
+            t = urllib.parse.urlsplit(url)
+            return urllib.parse.urlunsplit(('https',)+t[1:3]+('',''))
         return url
 
     def _getFilesShanaproject(self,url,count):
-        request = urllib2.Request(self.url+'&count='+str(count))
+        request = urllib.request.Request(self.url+'&count='+str(count))
         try:
-            with contextlib.closing(urllib2.urlopen(request)) as response:
+            with contextlib.closing(urllib.request.urlopen(request)) as response:
                 xmldoc = minidom.parseString(response.read())
                 itemlist = xmldoc.getElementsByTagName('item')
                 episodes=[]
                 for item in itemlist:
                     #this tuple is title, filename, torrent link
-                    episodes.append(map(htmlparser.unescape,(item.childNodes[0].firstChild.nodeValue,
+                    episodes.append(list(map(htmlparser.unescape,(item.childNodes[0].firstChild.nodeValue,
                       item.childNodes[2].firstChild.nodeValue,
-                      self._stripAndEnforceSSL(item.childNodes[1].firstChild.nodeValue))))
+                      self._stripAndEnforceSSL(item.childNodes[1].firstChild.nodeValue)))))
             return episodes
-        except urllib2.URLError, e:
-            print ("There was an error in rss.py: %r" % e)
-        except socket.timeout, e:
-            print ("There was an error in rss.py: %r" % e)
+        except urllib.error.URLError as e:
+            print(("There was an error in rss.py: %r" % e))
+        except socket.timeout as e:
+            print(("There was an error in rss.py: %r" % e))
         return []
 
     def _getFilesGeneric(self,url,count):
@@ -114,5 +114,5 @@ class RSSReader:
     
 if __name__=='__main__':
     test = RSSReader('')
-    print test.getFiles()
+    print(test.getFiles())
     

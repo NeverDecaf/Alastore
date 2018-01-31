@@ -1,7 +1,7 @@
 import sqlite3
 import os.path
 import re
-import urlparse
+import urllib.parse
 from StringMatcher import StringMatcher
 from rss import RSSReader
 ### READ THIS BEFORE CHANGING THE TIMES BELOW ###
@@ -33,9 +33,9 @@ class SQLManager:
     conn=None
     cursor=None
     db=None
-    EPISODE_NUM = re.compile(u'(?<= - )(\d+\.?\d*)') #make sure you get the last one [-1]
-    SHANA_TITLE = re.compile(u'.*(?= - \d)')
-    SUBGROUP = re.compile(u'(?<=\[)[^\]]*(?=])')#make sure you get the last one [-1]
+    EPISODE_NUM = re.compile('(?<= - )(\d+\.?\d*)') #make sure you get the last one [-1]
+    SHANA_TITLE = re.compile('.*(?= - \d)')
+    SUBGROUP = re.compile('(?<=\[)[^\]]*(?=])')#make sure you get the last one [-1]
     COLUMN_NAMES = ['RSS Feed','Download Directory','Save Directory','anidb Username','anidb Password','Season Sort','Poster Icons','Auto Hide Old','Shana Project Username','Shana Project Password']
     # init. supply the name of the db.
     def __init__(self, db='Alastore.db'):
@@ -55,23 +55,23 @@ class SQLManager:
 
     #functions used in conn.create_function
     def removeNonAlpha(self,string):
-        pattern = re.compile(u'[^\w ]|_+')
-        return pattern.sub(u'', string)
+        pattern = re.compile('[^\w ]|_+')
+        return pattern.sub('', string)
     
     def removeNonAlphaAndSpaces(self,string):
-        pattern = re.compile(u'[\W_]+')
-        return pattern.sub(u'', string)
+        pattern = re.compile('[\W_]+')
+        return pattern.sub('', string)
     
     def replaceSpaces(self,string):
-        pattern = re.compile(u'[ ]+')
-        return pattern.sub(u'%', string)
+        pattern = re.compile('[ ]+')
+        return pattern.sub('%', string)
     
     def editdist(self,string1,string2):
         a=StringMatcher(None,string1.lower(),string2.lower())
         return a.distance()
 
     def expandvars(self,path):
-        return os.path.expanduser(os.path.expandvars(path)) if path else u''
+        return os.path.expanduser(os.path.expandvars(path)) if path else ''
     
     # Creates all the tables we will be using. can be called each connect just for safety.
     def _createTables(self):
@@ -105,15 +105,15 @@ class SQLManager:
         try:
             self.cursor.execute('''ALTER TABLE user_settings ADD COLUMN
                      shanaproject_username text DEFAULT '' ''')
-        except sqlite3.OperationalError, msg:
-            if str(msg)!=ur'duplicate column name: shanaproject_username':
+        except sqlite3.OperationalError as msg:
+            if str(msg)!=r'duplicate column name: shanaproject_username':
                 raise
 
         try:
             self.cursor.execute('''ALTER TABLE user_settings ADD COLUMN
                      shanaproject_password text DEFAULT '' ''')
-        except sqlite3.OperationalError, msg:
-            if str(msg)!=ur'duplicate column name: shanaproject_password':
+        except sqlite3.OperationalError as msg:
+            if str(msg)!=r'duplicate column name: shanaproject_password':
                 raise
         self.conn.commit()
 
@@ -137,13 +137,13 @@ class SQLManager:
             self.cursor.execute('''SELECT rss, expandvars(dl_dir), expandvars(st_dir), anidb_username, anidb_password, season_sort, custom_icons, auto_hide_old, shanaproject_username, shanaproject_password FROM user_settings WHERE id=0''')
         settings = self.cursor.fetchone()
         if fetchanyway:
-            return dict(zip(self.COLUMN_NAMES,settings))
+            return dict(list(zip(self.COLUMN_NAMES,settings)))
         if not settings:
             return None
         if not settings[0] and not settings[1] and not settings[2]:
             return None
         #expand environment vars in the paths.
-        return dict(zip(self.COLUMN_NAMES,settings))
+        return dict(list(zip(self.COLUMN_NAMES,settings)))
 
 ##    def addBadTorrent(self,url):
 ##        self.cursor.execute('''REPLACE INTO bad_torrents VALUES (?)''',(url,))
@@ -175,7 +175,7 @@ class SQLManager:
                                     episode_data JOIN shana_series WHERE shana_series.id=? AND shana_series.id=episode_data.id ORDER BY episode ASC''',(title[1],))
             results = self.cursor.fetchall()
             for episode in results:
-                episodes.append(dict(zip(['id','file_name','episode','path','display_name','watched','downloaded','subgroup','hidden','torrent_url','torrent_data','download_percent','title','season'], episode)))
+                episodes.append(dict(list(zip(['id','file_name','episode','path','display_name','watched','downloaded','subgroup','hidden','torrent_url','torrent_data','download_percent','title','season'], episode))))
             series[title[0]] = episodes
         return series
     
@@ -224,7 +224,7 @@ class SQLManager:
         file_name = os.path.basename(path)
         try:
             episode = self.EPISODE_NUM.findall(rssTitle)[-1]
-        except Exception,e:
+        except Exception as e:
             'no episode number means this is a pv or op/ed or something we should just ignore.'
             return 0
         display_name = rssTitle
@@ -246,7 +246,7 @@ class SQLManager:
             self.cursor.execute('''INSERT INTO episode_data (id,file_name,episode,path,display_name,watched,subgroup,torrent) VALUES (?,?,?,?,?,?,?,?)''',
                                                             (lid,file_name,episode,path,display_name,watched,subgroup,torrenturl))
             self.conn.commit()
-        except sqlite3.IntegrityError, msg:
+        except sqlite3.IntegrityError as msg:
             self.conn.commit()
             'means it already exists'
             'why didnt we just use replace here i dont know but too afraid to change it now.'
@@ -370,7 +370,7 @@ WHERE title=?""",title*6)
         return files
 
     def updateHashes(self,hashed):
-        for path in hashed.keys():
+        for path in list(hashed.keys()):
             if hashed[path]!=None:
                 self.cursor.execute('''UPDATE parse_data SET ed2k=?,filesize=? WHERE path=?''',(hashed[path][0],hashed[path][1],path))
         self.conn.commit()

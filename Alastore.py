@@ -42,7 +42,7 @@ COLORSCHEME = {'background': QtGui.QColor(255,255,255),#
                'forcewatchedfg':QtGui.QColor(180,55,55),
                }
 from PyQt4.QtGui import QGroupBox
-from Queue import Queue
+from queue import Queue
 from PyQt4.QtCore import Qt
 class AccordianItem( QGroupBox ):
 
@@ -1059,7 +1059,7 @@ class SeriesGui(QtGui.QWidget):
                         success = self.series.SHANALINK.delete_follow(title)
                         self.finished.emit(success, delete)
                     except Exception as e:
-                        print 'Error dropping series: %r'%e
+                        print('Error dropping series: %r'%e)
                 
     class PlayandSortThread(QtCore.QThread):
         def __init__(self, seriesManager, queue, finished, parent=None):
@@ -1076,7 +1076,7 @@ class SeriesGui(QtGui.QWidget):
                     res = self.series.playAndSort(data)
                     self.finished.emit(item,*res)
                 except Exception as e:
-                    print 'Error in playQueue: %r'%e
+                    print('Error in playQueue: %r'%e)
 
             
 class SettingsDialog(QtGui.QDialog):

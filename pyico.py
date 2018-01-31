@@ -21,9 +21,9 @@ It is likely the fix only works for icons of exactly size 256x256
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 
-from __future__ import with_statement
-from __future__ import absolute_import
-from __future__ import division
+
+
+
 
 import sys
 import struct
@@ -69,7 +69,7 @@ class Icon(object):
         img.load() # fix for a bug in PIL 1.1.7
 
         if self._convert_rgb:
-            if 'A' in img.mode or img.info.has_key('transparency'):
+            if 'A' in img.mode or 'transparency' in img.info:
                 img = img.convert('RGBA')
             else:
                 img = img.convert('RGB')
@@ -136,7 +136,7 @@ class Icon(object):
         elif img.mode == 'P':
             wBitCount = 8
             bColorCount = len(img.palette.getdata()[1]) // 3
-            print bColorCount
+            print(bColorCount)
 
         dwImageOffset = dataoffset
 
@@ -256,5 +256,5 @@ if __name__ == '__main__':
         ico.convert_rgb(True)
     ico.save()
 
-    print "Successfully wrote icon to %s." % options.output_file
+    print("Successfully wrote icon to %s." % options.output_file)
 
