@@ -15,11 +15,12 @@ import hashlib
 import os
 ##import re
 # get info from http api
-import urllib2
+import urllib.request, urllib.error, urllib.parse
 import contextlib
-import StringIO
+import io
 import gzip
 from xml.dom import minidom
+from functools import reduce
 FAKE_HEADERS={
 'Accept-Charset':'ISO-8859-1,utf-8;q=0.7,*;q=0.3',
 'Accept-Encoding':'gzip',
@@ -40,10 +41,10 @@ RETURN_CODES={
     }
 def anidb_series_info(aid):
     url='http://api.anidb.net:9001/httpapi?request=anime&client=%s&clientver=%s&protover=1&aid=%s'%(CLIENT,CLIENTVER,aid)
-    request = urllib2.Request(url,None,FAKE_HEADERS)
-    with contextlib.closing(urllib2.urlopen(request)) as response:
+    request = urllib.request.Request(url,None,FAKE_HEADERS)
+    with contextlib.closing(urllib.request.urlopen(request)) as response:
         if response.info().get('Content-Encoding') == 'gzip':
-                buf = StringIO.StringIO(response.read())
+                buf = io.StringIO(response.read())
                 f = gzip.GzipFile(fileobj=buf)
                 data = f.read()
         else:
@@ -59,11 +60,11 @@ def anidb_series_info(aid):
     return airdate,imageurl
 
 def anidb_title_list():
-    request = urllib2.Request('http://anidb.net/api/anime-titles.xml.gz',None,FAKE_HEADERS)
-    with contextlib.closing(urllib2.urlopen(request)) as response:
+    request = urllib.request.Request('http://anidb.net/api/anime-titles.xml.gz',None,FAKE_HEADERS)
+    with contextlib.closing(urllib.request.urlopen(request)) as response:
 ##    with contextlib.closing(open('titles.xml','rb')) as response:
         if response.info().get('Content-Encoding') == 'gzip':
-            buf = StringIO.StringIO(response.read())
+            buf = io.StringIO(response.read())
             f = gzip.GzipFile(fileobj=buf)
             data = f.read()
         else:
@@ -117,8 +118,8 @@ class anidbInterface:
         try:
             if not self._auth(user,passw):
                 return None
-        except Exception,e:
-            print ("error with anidb auth: %r"%e)
+        except Exception as e:
+            print(("error with anidb auth: %r"%e))
             return None
         return -1
         
@@ -138,10 +139,10 @@ class anidbInterface:
 ##        while time.time()-hashingisslow<2:pass
         try:
             if DEBUG_ADD_CHAIN:
-                print 'adding with vars:',path,aid,group,epno,ed2k,do_generic_add
+                print('adding with vars:',path,aid,group,epno,ed2k,do_generic_add)
             aid=self._add(ed2k,aid,group,epno,do_generic_add)
-        except Exception, e:#socket.error,e:
-            print ("error with anidb add: %r"%e)
+        except Exception as e:#socket.error,e:
+            print(("error with anidb add: %r"%e))
             return None
         #only need this if we are issuing another command.. but do it anyway just for safety
         return aid
@@ -157,8 +158,8 @@ class anidbInterface:
         self.socket.bind(('',self.LOCALPORT))#bind to local port
         try:
             self.socket.connect((host, port))
-        except socket.error,e:
-            print ("There was an error: %r" % e)
+        except socket.error as e:
+            print(("There was an error: %r" % e))
             self._close_socket()
         return self.socket
         
@@ -186,7 +187,7 @@ class anidbInterface:
             hashes = [md4_hash(data).digest() for data in a]
             if len(hashes) == 1:
                 md4 = hashes[0].encode("hex")
-            else: md4 = md4_hash(reduce(lambda a,d: a + d, hashes, "")).hexdigest()
+            else: md4 = md4_hash(reduce(lambda a,d: a + d, hashes, b'')).hexdigest()
             f.close()
             
         return 'ed2k://|file|'+os.path.basename(file_path)+'|'\
@@ -202,9 +203,9 @@ class anidbInterface:
             return None
         '''auths with anidb using passed credentials and socket. returns None on failure.'''
         data = 'AUTH user='+USERNAME+'&pass='+PASSWORD+'&protover=3&client=%s&clientver=%s'%(UDPCLIENT,UDPCLIENTVER)
-        self.socket.sendall(data)
+        self.socket.sendall(data.encode('utf8'))
         
-        buf = self.socket.recv(2048)
+        buf = self.socket.recv(2048).decode('utf8')
         time.sleep(2)
         if str(buf).split(' ')[0] != '200':
             return None
@@ -219,26 +220,26 @@ class anidbInterface:
         ed2k=full_ed2k.split('|')[4]
         filesize=full_ed2k.split('|')[3]
         data = 'MYLISTADD size='+str(filesize)+'&ed2k='+ed2k+'&state='+str(self.STATE)+'&viewed='+str(self.VIEWED)+'&s='+self.SK
-        self.socket.sendall(data)
+        self.socket.sendall(data.encode('utf8'))
         
-        buf = self.socket.recv(2048)
+        buf = self.socket.recv(2048).decode('utf8')
         time.sleep(2)
         if str(buf).split(' ')[0] =='320':
             if aid:
                 if DEBUG_ADD_CHAIN:
-                    print 'NO SUCH FILE, performing generic add with vars:',aid,group,epno,do_generic_add
+                    print('NO SUCH FILE, performing generic add with vars:',aid,group,epno,do_generic_add)
                 return self._add_generic(aid,group,epno,do_generic_add)
             else:
                 if DEBUG_ADD_CHAIN:
-                    print 'No aid provided, returning none as generic add cannot be done without aid.'
+                    print('No aid provided, returning none as generic add cannot be done without aid.')
                 return None#can't add generic without aid. try later.
         if str(buf).split(' ')[0] =='210':
             if DEBUG_ADD_CHAIN:
-                print 'add returned 210, should be successful'
-            lid=str(buf).split(u'\n')[1]
+                print('add returned 210, should be successful')
+            lid=str(buf).split('\n')[1]
             if lid=='0':
                 if DEBUG_ADD_CHAIN:
-                    print 'impossible error'
+                    print('impossible error')
                 return None#failure, though im not sure if this can occur here or only in generic add
             if not aid:
                 return self._get_aid(lid)
@@ -258,9 +259,9 @@ class anidbInterface:
     def _check_exists(self,aid,epno):
         '''Checks for a file by aid and episode number. used to verify generic adds.'''
         data = 'MYLIST aid='+str(aid)+'&epno='+str(epno)+'&s='+self.SK
-        self.socket.sendall(data)
+        self.socket.sendall(data.encode('utf8'))
         
-        buf = self.socket.recv(2048)
+        buf = self.socket.recv(2048).decode('utf8')
         time.sleep(2)
         return str(buf).split(' ')[0] !='321' # 321 is the code for NO SUCH ENTRY
         
@@ -270,9 +271,9 @@ class anidbInterface:
     def _get_aid(self,lid):
         '''Retreives the aid for the file in mylist referenced by list id.'''
         data = 'MYLIST lid='+str(lid)+'&s='+self.SK
-        self.socket.sendall(data)
+        self.socket.sendall(data.encode('utf8'))
         
-        buf = self.socket.recv(2048)
+        buf = self.socket.recv(2048).decode('utf8')
         time.sleep(2)
         if str(buf).split(' ')[0] =='221':
             #{int4 lid}|{int4 fid}|{int4 eid}|{int4 aid}|{int4 gid}|{int4 date}|{int2 state}|{int4 viewdate}|{str storage}|{str source}|{str other}|{int2 filestate}
@@ -293,24 +294,24 @@ class anidbInterface:
             Because of this, we must first check to see if the file already exists in mylist before attempting any kind of generic add.'''
         
         if DEBUG_ADD_CHAIN:
-            print 'adding generic with vars:',aid,group,epno,do_generic_add
+            print('adding generic with vars:',aid,group,epno,do_generic_add)
 
         if self._check_exists(aid,epno):
             if DEBUG_ADD_CHAIN:
-                print 'file already in mylist, returning success'
+                print('file already in mylist, returning success')
             return -1
         
 ##        'try to do a group name add first'
         if group:
             data = 'MYLISTADD aid='+str(aid)+'&gname='+str(group)+'&epno='+str(epno)+'&state='+str(self.STATE)+'&viewed='+str(self.VIEWED)+'&s='+self.SK
-            self.socket.sendall(data)
+            self.socket.sendall(data.encode('utf8'))
             
-            buf = self.socket.recv(2048)
+            buf = self.socket.recv(2048).decode('utf8')
             if DEBUG_ADD_CHAIN:
-                    print 'result of generic add(1):',buf
+                    print('result of generic add(1):',buf)
             time.sleep(2)
             if str(buf).split(' ')[0] =='210':
-                added=str(buf).split(u'\n')[1]
+                added=str(buf).split('\n')[1]
                 if added=='1':# this will be 0 if the add failed, despite the code 210 indicating a success (of 0 files added)
                     return -1 #success
         
@@ -321,15 +322,15 @@ class anidbInterface:
             return None#failure, not time yet for generic add
 
         if DEBUG_ADD_CHAIN:
-            print 'attempting generic add (w/o gname)'
-        self.socket.sendall(data)
+            print('attempting generic add (w/o gname)')
+        self.socket.sendall(data.encode('utf8'))
         
-        buf = self.socket.recv(2048)
+        buf = self.socket.recv(2048).decode('utf8')
         time.sleep(2)
         if DEBUG_ADD_CHAIN:
-                print 'result of generic add(2):',buf
+                print('result of generic add(2):',buf)
         if str(buf).split(' ')[0] =='210':
-            added=str(buf).split(u'\n')[1]
+            added=str(buf).split('\n')[1]
             if added=='1':
                 return -1 #success
         return None #failure
@@ -341,8 +342,8 @@ class anidbInterface:
         '''Log out of mylist'''
         data = 'LOGOUT s='+self.SK
         self.SK=None
-        self.socket.sendall(data)
-        buf = self.socket.recv(2048)
+        self.socket.sendall(data.encode('utf8'))
+        buf = self.socket.recv(2048).decode('utf8')
         if str(buf).split(' ')[0] =='203':
             return 1 # success
         return None
@@ -352,9 +353,5 @@ class anidbInterface:
             return None
         self.socket.close()
         self.socket=None
+        
 
-
-
-
-
-    

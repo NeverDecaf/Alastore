@@ -1,6 +1,6 @@
 from requests import session
 from lxml import html as lxmlhtml
-from urlparse import urljoin
+from urllib.parse import urljoin
 
 # defines several methods for interacting with your shanaproject mylist because there is no official api.
 class ShanaLink:

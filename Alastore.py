@@ -14,9 +14,11 @@ pip install python-Levenshtein pillow BitTorrent-bencode
 python 2.7.9 or later is required. (not 3 obviously)
 '''
 
-from PyQt4 import QtGui
-from PyQt4 import QtCore
+from PyQt5 import QtGui, QtWidgets
+from PyQt5 import QtCore, QtWidgets
 import os
+
+
 UPDATEINTERVAL=10*60*1000# ms between full updates (full update means poster dl, anidb add, file hashing.)
 FILEUPDATEINTERVAL=120*1000# ms between file updates (only file check, though this can be a lengthy operation due to hashing.)
 #feel free to add more/better color schemes.
@@ -41,8 +43,13 @@ COLORSCHEME = {'background': QtGui.QColor(255,255,255),#
                'notdownloadedfg': QtGui.QColor(30,120,120),
                'forcewatchedfg':QtGui.QColor(180,55,55),
                }
-from PyQt4.QtGui import QGroupBox
- 
+from PyQt5.QtWidgets import QGroupBox
+from queue import Queue
+
+
+from PyQt5.QtCore import Qt
+
+
 class AccordianItem( QGroupBox ):
 
 
@@ -56,8 +63,10 @@ class AccordianItem( QGroupBox ):
                 QGroupBox.__init__( self, accordian )
  
                 # create the layout
-                from PyQt4.QtCore import Qt
-                from PyQt4.QtGui import QVBoxLayout
+                from PyQt5.QtCore import Qt
+
+
+                from PyQt5.QtWidgets import QVBoxLayout
 
 
                 self._accordianWidget = accordian
@@ -83,16 +92,27 @@ class AccordianItem( QGroupBox ):
                 self.setTitle( title )
 
 
-                self.contextMenu=QtGui.QMenu()
-                self.contextMenu.addAction("&Hide Series", self, SLOT('hideSeries()'))
+                self.contextMenu=QtWidgets.QMenu()
+                hideaction = QtWidgets.QAction(self.tr("&Hide Series"), self)
+                hideaction.triggered.connect(self.hideSeries)
+                self.contextMenu.addAction(hideaction)
+##                self.contextMenu.addAction("&Hide Series", self, SLOT('hideSeries()'))
+                allwatchedaction = QtWidgets.QAction(self.tr("&Mark All Watched"), self)
+                allwatchedaction.triggered.connect(self.markWatched)
+                self.contextMenu.addAction(allwatchedaction)
+##                self.contextMenu.addAction("&Mark All Watched", self, SLOT('markWatched()'))
 
-                self.contextMenu.addAction("&Mark All Watched", self, SLOT('markWatched()'))
+                self.markWatchedAction = QtWidgets.QAction(self.tr("&Mark Episode Watched"), self)
+                self.markWatchedAction.triggered.connect(self.markIndivWatched)
+                self.contextMenu.addAction(self.markWatchedAction)
+##                self.markWatchedAction = self.contextMenu.addAction("&Mark Episode Watched", self, SLOT('markIndivWatched()'))
 
-                self.markWatchedAction = self.contextMenu.addAction("&Mark Episode Watched", self, SLOT('markIndivWatched()'))
-
-                self.dropAction = self.contextMenu.addAction("&Drop Series", self, SLOT('dropSeries()'))
+                self.dropAction = QtWidgets.QAction(self.tr("&Drop Series"), self)
+                self.dropAction.triggered.connect(self.dropSeries)
+                self.contextMenu.addAction(self.dropAction)
+##                self.dropAction = self.contextMenu.addAction("&Drop Series", self, SLOT('dropSeries()'))
                 
-                self.connect(self,SIGNAL("customContextMenuRequested(QPoint)"),self.execContextMenu)
+                self.customContextMenuRequested[QtCore.QPoint].connect(self.execContextMenu)
 
                 # instead of a layout we position the widget manually. there were some issues on
                 # linux if this wasn't done.
@@ -107,7 +127,9 @@ class AccordianItem( QGroupBox ):
                 """
                 return self._accordianWidget
  
-        from PyQt4.QtCore import pyqtSlot
+        from PyQt5.QtCore import pyqtSlot
+
+
         @pyqtSlot()
         def dropSeries(self):
             drop = DropDialog(self._widget.title,self)#self._widget.title
@@ -119,7 +141,7 @@ class AccordianItem( QGroupBox ):
                 self._widget.dropSeries(delete)
         @pyqtSlot() 
         def hideSeries(self):
-            if not QtGui.QMessageBox.warning(
+            if not QtWidgets.QMessageBox.warning(
                 self, "Hide Series?",
                 '''This series will be removed from this list until a new episode appears in your RSS.
 You cannot undo this action.
@@ -130,7 +152,7 @@ Are you sure you wish to hide the series:
                 self._widget.refreshData()
         @pyqtSlot()
         def markWatched(self):
-            if not QtGui.QMessageBox.warning(
+            if not QtWidgets.QMessageBox.warning(
                 self, "Mark Watched?",
                 '''This will mark every episode in this series "%s" as watched.
 This includes files which have not yet been downloaded.
@@ -144,7 +166,7 @@ Are you sure you wish to mark all episodes of %s as watched?
                     self._widget.refreshData()
         @pyqtSlot()
         def markIndivWatched(self):
-            if not QtGui.QMessageBox.warning(
+            if not QtWidgets.QMessageBox.warning(
                 self, "Mark Watched?",
                 '''Are you sure you want to force mark the file: %s as watched?
 Force marking a file this way will NOT automatically sort/move the file and it will NEVER add the file to your mylist.
@@ -168,7 +190,9 @@ You should only use this option if a file fails to download or is moved/deleted 
             self.contextMenu.exec_(gpos)
             
         def doubleClickRect( self ):
-                from PyQt4.QtCore import QRect
+                from PyQt5.QtCore import QRect
+
+
                 return QRect( self.collapseControlWidth, 0, self.rect().width() - self.collapseControlWidth - 1, self.itemHeight )
             
         def dragEnterEvent( self, event ):
@@ -180,7 +204,9 @@ You should only use this option if a file fails to download or is moved/deleted 
                         event.acceptProposedAction()
 
         def dragDropRect( self ):
-                from PyQt4.QtCore import QRect
+                from PyQt5.QtCore import QRect
+
+
                 return QRect( 25, 7, 10, 6 )
  
         def dragDropMode( self ):
@@ -201,7 +227,9 @@ You should only use this option if a file fails to download or is moved/deleted 
                 self._accordianWidget.emitItemsReordered()
  
         def expandCollapseRect( self ):
-                from PyQt4.QtCore import QRect
+                from PyQt5.QtCore import QRect
+
+
                 return QRect( 0, 0, self.collapseControlWidth, self.itemHeight )
  
         def enterEvent( self, event ):
@@ -213,7 +241,9 @@ You should only use this option if a file fails to download or is moved/deleted 
                 event.accept()
                 
         def mouseDoubleClickEvent( self, event ):
-            from PyQt4.QtCore import Qt
+            from PyQt5.QtCore import Qt
+
+
             if ( event.button() == Qt.LeftButton and self.doubleClickRect().contains( event.pos() ) ):
                 self._widget.headerClicked()
                                                       
@@ -231,7 +261,9 @@ You should only use this option if a file fails to download or is moved/deleted 
  
         def mousePressEvent( self, event ):
                 # handle an internal move
-                from PyQt4.QtCore import Qt
+                from PyQt5.QtCore import Qt
+
+
  
                 if ( event.button() == Qt.LeftButton and self.expandCollapseRect().contains( event.pos() ) ):
                         self._clicked = True
@@ -246,8 +278,11 @@ You should only use this option if a file fails to download or is moved/deleted 
                 return self._collapsible
  
         def paintEvent( self, event ):
-                from PyQt4.QtCore       import Qt, QRect
-                from PyQt4.QtGui        import QPainter, QPainterPath, QPalette, QPixmap, QPen
+                from PyQt5.QtCore       import Qt, QRect
+
+
+                from PyQt5.QtGui        import (QPainter, QPainterPath,
+                                                QPalette, QPixmap, QPen)
  
                 painter = QPainter()
                 painter.begin( self )
@@ -373,8 +408,10 @@ You should only use this option if a file fails to download or is moved/deleted 
             self.percentDownloaded=percent
                 
         def showMenu( self ):
-                from PyQt4.QtCore import QRect
-                from PyQt4.QtGui import QCursor
+                from PyQt5.QtCore import QRect
+
+
+                from PyQt5.QtGui import QCursor
                 if ( QRect( 0, 0, self.width(), self.itemHeight ).contains( self.mapFromGlobal( QCursor.pos() ) ) ):
                         self._accordianWidget.emitItemMenuRequested( self )
  
@@ -384,8 +421,10 @@ You should only use this option if a file fails to download or is moved/deleted 
         def widget( self ):
                 return self._widget
 
-from PyQt4.QtCore       import pyqtSignal, pyqtProperty
-from PyQt4.QtGui        import QScrollArea
+from PyQt5.QtCore       import pyqtSignal, pyqtProperty
+
+
+from PyQt5.QtWidgets import        QScrollArea
 #from accordianitem     import AccordianItem
  
 class AccordianWidget( QScrollArea ):
@@ -409,7 +448,7 @@ class AccordianWidget( QScrollArea ):
 ##                self.setMouseTracking(True)
 ##                self.verticalScrollBar().setMaximumWidth(10)
  
-                from PyQt4.QtGui import QWidget
+                from PyQt5.QtWidgets import QWidget
                 widget = QWidget( self )
  
                 # define custom properties
@@ -424,7 +463,7 @@ class AccordianWidget( QScrollArea ):
                 pal.setColor(self.backgroundRole(), COLORSCHEME['background']);
                 self.setPalette(pal)
                 # create the layout
-                from PyQt4.QtGui import QVBoxLayout
+                from PyQt5.QtWidgets import QVBoxLayout
                 self.expanded = []
                 self.seriesManager=seriesManager
                 self.lock=QtCore.QMutex()
@@ -434,7 +473,7 @@ class AccordianWidget( QScrollArea ):
                 layout.setSpacing( 3 )
                 layout.addStretch(1)
 
-                self.firstStartLabel = QtGui.QLabel(' Right click the tray icon to get started!')
+                self.firstStartLabel = QtWidgets.QLabel(' Right click the tray icon to get started!')
                 widget.setLayout( layout )
                 self.actualWidget = widget
  
@@ -725,7 +764,7 @@ class AccordianWidget( QScrollArea ):
                 return
 ##            self.thread = SingleCallThread(lambda:self.seriesManager.phase2Thread(quick),self.lock,self)
             self.thread = SingleCallThread(self.seriesManager.icheckFiles,self.lock,self)
-            self.connect(self.thread, SIGNAL("finished()"), lambda:self.fileUpdateEnd(quick))
+            self.thread.finished.connect(lambda:self.fileUpdateEnd(quick))
             try:
                 self.seriesManager._getUserSettings()
                 self.seriesManager._populateSeries()
@@ -759,7 +798,7 @@ class AccordianWidget( QScrollArea ):
                 self.waitThenQUpdate()# only schedule another update if this is the quick update
                 
             self.thread = SingleCallThread(lambda:self.seriesManager.phase1Thread(quick),self.lock,self)
-            self.connect(self.thread, SIGNAL("finished()"), lambda:self.updateMid0(quick))
+            self.thread.finished.connect(lambda:self.updateMid0(quick))
             try:
                 if not self.seriesManager.phase1Prep(quick):
                         self.lock.unlock()
@@ -773,7 +812,7 @@ class AccordianWidget( QScrollArea ):
             #create the business thread
             # no refresh, its a gap.
             self.thread = SingleCallThread(lambda:self.seriesManager.phase1Thread2(quick),self.lock,self)
-            self.connect(self.thread, SIGNAL("finished()"), lambda:self.updateMid1(quick))
+            self.thread.finished.connect(lambda:self.updateMid1(quick))
             try:
                 self.seriesManager.phase1Gap(quick)
             except:
@@ -791,7 +830,7 @@ class AccordianWidget( QScrollArea ):
                 self.lock.unlock()
                 raise
             self.thread = SingleCallThread(lambda:self.seriesManager.phase2Thread(quick),self.lock,self)
-            self.connect(self.thread, SIGNAL("finished()"), lambda:self.updateMid2(quick))
+            self.thread.finished.connect(lambda:self.updateMid2(quick))
             try:
                 self.seriesManager.phase2Prep(quick)
             except:
@@ -809,7 +848,7 @@ class AccordianWidget( QScrollArea ):
                 self.lock.unlock()
                 raise
             self.thread = SingleCallThread(lambda:self.seriesManager.phase3Thread(quick),self.lock,self)
-            self.connect(self.thread, SIGNAL("finished()"), lambda:self.updateEnd(quick))
+            self.thread.finished.connect(lambda:self.updateEnd(quick))
             try:
                 self.seriesManager.phase3Prep(quick)
             except:
@@ -838,26 +877,14 @@ class SingleCallThread(QtCore.QThread):
             self.lock.unlock()
             raise
 
-class NonLockingCallThread(QtCore.QThread):
-    finished = QtCore.pyqtSignal(QtGui.QListWidgetItem,object,object,object,object)
-    
-    def __init__(self, method, callback, item, parent=None):
-        QtCore.QThread.__init__(self, parent)
-        self.runmethod = method
-        self.item=item
-        self.finished.connect(callback)
-        
-    def run(self):
-        res = self.runmethod()
-        self.finished.emit(self.item,*res)
+from PyQt5.QtCore import pyqtSlot
 
 
-from PyQt4.QtCore import pyqtSlot,SIGNAL,SLOT
 
-class myListWidget(QtGui.QListWidget):
+class myListWidget(QtWidgets.QListWidget):
     def __init__(self,parent=None):
         super(myListWidget,self).__init__(parent)
-        self.setSelectionMode(QtGui.QListWidget.NoSelection)
+        self.setSelectionMode(QtWidgets.QListWidget.NoSelection)
 ##        self.setStyleSheet( """ QListWidget:item:selected:active {
 ##                                     background: none;
 ##                                }
@@ -873,18 +900,21 @@ class myListWidget(QtGui.QListWidget):
 ##                                """
 ##                                )
     def sizeHint(self):
-        from PyQt4.QtCore import QSize
+        from PyQt5.QtCore import QSize
+
+
         return QSize(self.sizeHintForColumn(0),self.sizeHintForRow(0))
 ##        self.listWidget.setSizeHint(QSize(self.listWidget.sizeHintForColumn(0),self.listWidget.sizeHintForRow(0)*self.listWidget.count()))
 
 
 
         
-class SeriesGui(QtGui.QWidget):
-
+class SeriesGui(QtWidgets.QWidget):
+    playSignal = QtCore.pyqtSignal(QtWidgets.QListWidgetItem,object,object,object,object)
+    dropSignal = QtCore.pyqtSignal(object,object)
     #data wont be none in the final release
     def __init__(self,parent,data,seriesManager,title):
-        QtGui.QWidget.__init__(self, parent)
+        QtWidgets.QWidget.__init__(self, parent)
 ##        self.setFlat(False)
         self.data = data
         self.title= title
@@ -893,13 +923,23 @@ class SeriesGui(QtGui.QWidget):
         self.latestDownloaded=None
         self.downloadPercent=None
         self.seriesManager=seriesManager
-        self.layout = QtGui.QVBoxLayout(self)
+        
+        self.dropQueue = Queue()
+        self.dropSignal.connect(self.dropComplete)
+        self.dropThread = self.DropThread(self.seriesManager, self.dropQueue, self.dropSignal)
+        self.dropThread.start()
+        
+        self.playQueue = Queue()
+        self.playSignal.connect(self.playEnd)
+        self.playThread = self.PlayandSortThread(self.seriesManager, self.playQueue, self.playSignal)
+        self.playThread.start()
+        
+        self.layout = QtWidgets.QVBoxLayout(self)
         self.layout.setSpacing( 0 )
         self.layout.setContentsMargins(0,0,0,0)
-        self.listWidget= myListWidget()#QtGui.QListWidget()
+        self.listWidget= myListWidget()#QtWidgets.QListWidget()
         self.listWidget.setFrameStyle(0)
-        self.listWidget.connect(self.listWidget,SIGNAL("itemDoubleClicked(QListWidgetItem*)"),
-               self,SLOT("doubleClickedSlot(QListWidgetItem*)"))
+        self.listWidget.itemDoubleClicked[QtWidgets.QListWidgetItem].connect(self.doubleClickedSlot)
         self.layout.addWidget(self.listWidget)
 ##        GroupBox.setWindowTitle(QtGui.QApplication.translate("GroupBox", "GroupBox", None, QtGui.QApplication.UnicodeUTF8))
 ##        return self
@@ -907,22 +947,20 @@ class SeriesGui(QtGui.QWidget):
     def setSeries(self,widget):
         self.series = widget
 
-    @pyqtSlot(QtGui.QListWidgetItem)    
+    @pyqtSlot(QtWidgets.QListWidgetItem)    
     def doubleClickedSlot(self,item):
         self.play(item)
 
     def play(self,item):
-        from PyQt4.QtCore import Qt
-        data = item.data(Qt.UserRole).toPyObject()[0]
+        data = item.data(Qt.UserRole)[0]
         if data['downloaded']>0:
             if self.seriesManager.prepPlayAndSort()==-1:
-                QtGui.QMessageBox.information(self,
+                QtWidgets.QMessageBox.information(self,
                         "No Settings Found!",
                         "Please fill out the required user settings\nbefore watching an episode.")
             else:
                 'play the file in a separate thread to prevent ui lag.'
-                self.pthread = NonLockingCallThread(lambda:self.seriesManager.playAndSort(data),self.playEnd,item,self)
-                self.pthread.start()
+                self.playQueue.put(item)
 
     def playEnd(self,item,path,dest_file,ed2k,filesize):
         if path!='watched':
@@ -943,7 +981,9 @@ class SeriesGui(QtGui.QWidget):
         return self.title
         
     def generateBox(self):
-        from PyQt4.QtCore import Qt
+        from PyQt5.QtCore import Qt
+
+
         # god this line ruined everything
 ##        self.data=self.seriesManager.SQL.getSeries()
         self.latest=None
@@ -953,9 +993,9 @@ class SeriesGui(QtGui.QWidget):
         self.latestDownloaded=None
         self.downloadPercent=None
         #ADVANCED TECHNIQUE:
-        ''' if self.title no longer a key in self.data then have self.parent remove self.series'''
-        ''' dont know how safe this is so check this out later'''
-        ''' not needed since we just refresh the entire list every update'''
+        ''' if self.title no longer a key in self.data then have self.parent remove self.series
+        dont know how safe this is so check this out later
+        not needed since we just refresh the entire list every update'''
         for i in range(len(self.data[self.title])):
             item=self.data[self.title][i]
             if i<self.listWidget.count():
@@ -963,7 +1003,7 @@ class SeriesGui(QtGui.QWidget):
                 newItem.setData(Qt.UserRole,(item,))
                 #already exists just update its data.
             else:
-                listItem = QtGui.QListWidgetItem(item['display_name'])
+                listItem = QtWidgets.QListWidgetItem(item['display_name'])
                 self.listWidget.insertItem(0,listItem)
                 newItem=self.listWidget.item(0)
                 newItem.setData(Qt.UserRole,(item,))
@@ -989,8 +1029,10 @@ class SeriesGui(QtGui.QWidget):
 
         self.listWidget.setMinimumSize(self.listWidget.sizeHintForColumn(0),self.listWidget.sizeHintForRow(0)*self.listWidget.count())
     def colorize(self,item):
-        from PyQt4.QtCore import Qt
-        data = item.data(Qt.UserRole).toPyObject()[0]
+        from PyQt5.QtCore import Qt
+
+
+        data = item.data(Qt.UserRole)[0]
         if data['downloaded']==0:
             item.setForeground(COLORSCHEME['notdownloadedfg'])
             item.setBackground(COLORSCHEME['notdownloaded'])
@@ -1012,43 +1054,33 @@ class SeriesGui(QtGui.QWidget):
         self.seriesManager.SQL.forceWatched(title = self.title)
 
     def markEpisodeWatched(self):
-        from PyQt4.QtCore import Qt
-        torrent = self.listWidget.currentItem().data(Qt.UserRole).toPyObject()[0]['torrent_url']
+        from PyQt5.QtCore import Qt
+
+
+        torrent = self.listWidget.currentItem().data(Qt.UserRole)[0]['torrent_url']
         self.seriesManager.SQL.forceWatched(torrenturl = torrent)
         
     def episodeSelected(self):
         return not self.listWidget.currentItem()==None
 
     def selectedEpisodeName(self):
-        from PyQt4.QtCore import Qt
-        return self.listWidget.currentItem().data(Qt.UserRole).toPyObject()[0]['file_name']
+        from PyQt5.QtCore import Qt
+
+
+        return self.listWidget.currentItem().data(Qt.UserRole)[0]['file_name']
         
     def hideSeries(self):
         self.seriesManager.SQL.hideSeries(self.title)
 
     def dropSeries(self,delete):
-        dropthread = self.DropThread(lambda:self.seriesManager.SHANALINK.delete_follow(self.title), self.dropComplete, delete, self)
-        dropthread.start()
+        self.dropQueue.put((self.title,delete))
 
     def dropComplete(self, success, delete):
         if success:
             self.seriesManager.dropSeries(self.title,delete)
             self.refreshData()
         else:
-            QtGui.QMessageBox.information(self,'Drop Failed','Could not connect to Shana Project to drop %s, check your login credentials and internet connection.'%self.title)
-        
-    class DropThread(QtCore.QThread):
-            finished = QtCore.pyqtSignal(object,object)
-    
-            def __init__(self, method, callback, delete, parent=None):
-                QtCore.QThread.__init__(self, parent)
-                self.runmethod = method
-                self.delete = delete
-                self.finished.connect(callback)
-                
-            def run(self):
-                success = self.runmethod()
-                self.finished.emit(success, self.delete)
+            QtWidgets.QMessageBox.information(self,'Drop Failed','Could not connect to Shana Project to drop %s, check your login credentials and internet connection.'%self.title)
 
     def setTitle(self):
         if self.series:
@@ -1061,10 +1093,46 @@ class SeriesGui(QtGui.QWidget):
             else:
                 self.series.setTitle(self.title)
             self.series.setStatus(self.latestDownloaded,self.downloading,self.downloadPercent)
+
+    class DropThread(QtCore.QThread):
+            def __init__(self, seriesManager, queue, finished, parent=None):
+                QtCore.QThread.__init__(self, parent)
+                self.queue = queue
+                self.series=seriesManager
+                self.finished=finished
+                
+            def run(self):
+                while True:
+                    try:
+                        title,delete = self.queue.get()
+                        success = self.series.SHANALINK.delete_follow(title)
+                        self.finished.emit(success, delete)
+                    except Exception as e:
+                        print('Error dropping series: %r'%e)
+                
+    class PlayandSortThread(QtCore.QThread):
+        def __init__(self, seriesManager, queue, finished, parent=None):
+            QtCore.QThread.__init__(self, parent)
+            self.queue = queue
+            self.series=seriesManager
+            self.finished=finished
             
-class SettingsDialog(QtGui.QDialog):
+        def run(self):
+            while True:
+                try:
+                    item = self.queue.get()
+                    data = item.data(Qt.UserRole)[0]
+                    res = self.series.playAndSort(data)
+                    self.finished.emit(item,*res)
+                except Exception as e:
+                    print('Error in playQueue: %r'%e)
+
+            
+class SettingsDialog(QtWidgets.QDialog):
     def __init__(self,initialSettings, parent=None):
-        from PyQt4.QtCore import Qt
+        from PyQt5.QtCore import Qt
+
+
         super(SettingsDialog, self).__init__(parent)
         self.result=None
         self.setWindowTitle(self.tr("User Settings"))
@@ -1072,16 +1140,16 @@ class SettingsDialog(QtGui.QDialog):
 ##        self.setSizeGripEnabled(True)
 ##        self.setAttribute(Qt.WA_DeleteOnClose)
 
-        mainLayout = QtGui.QVBoxLayout()
+        mainLayout = QtWidgets.QVBoxLayout()
 ##        mainLayout.addStretch(1)
 
         mainLayout.setAlignment(Qt.AlignCenter)
 
-        optionsLayout = QtGui.QFormLayout()
-        confirmLayout = QtGui.QGridLayout()
+        optionsLayout = QtWidgets.QFormLayout()
+        confirmLayout = QtWidgets.QGridLayout()
 
-        top=QtGui.QWidget()
-        bottom=QtGui.QWidget()
+        top=QtWidgets.QWidget()
+        bottom=QtWidgets.QWidget()
         top.setLayout(optionsLayout)
         bottom.setLayout(confirmLayout)
 
@@ -1090,20 +1158,20 @@ class SettingsDialog(QtGui.QDialog):
 
         self.options = {}
 
-        self.options['RSS Feed'] = QtGui.QLineEdit()
+        self.options['RSS Feed'] = QtWidgets.QLineEdit()
         self.options['RSS Feed'].setPlaceholderText("Paste your private RSS feed here.")
         optionsLayout.addRow("Private RSS Feed",self.options['RSS Feed'])
 
         
-        fileSelect=QtGui.QWidget()
-        fileSelectLayout=QtGui.QGridLayout()
+        fileSelect=QtWidgets.QWidget()
+        fileSelectLayout=QtWidgets.QGridLayout()
         fileSelect.setLayout(fileSelectLayout)
 
-        self.options['Download Directory']=QtGui.QLineEdit()
+        self.options['Download Directory']=QtWidgets.QLineEdit()
         self.options['Download Directory'].setPlaceholderText("Source Directory")
-        self.dlBrowse=QtGui.QPushButton('&Browse')
+        self.dlBrowse=QtWidgets.QPushButton('&Browse')
 
-        self.connect(self.dlBrowse,SIGNAL("released()"),lambda:self.folderSelect(self.options['Download Directory']))
+        self.dlBrowse.released.connect(lambda:self.folderSelect(self.options['Download Directory']))
         
         fileSelectLayout.addWidget(self.options['Download Directory'],0,0)
         fileSelectLayout.addWidget(self.dlBrowse,0,1)
@@ -1113,15 +1181,15 @@ class SettingsDialog(QtGui.QDialog):
         fileSelect.setContentsMargins(0, 0, 0, 0)
 
 
-        fileSelect=QtGui.QWidget()
-        fileSelectLayout=QtGui.QGridLayout()
+        fileSelect=QtWidgets.QWidget()
+        fileSelectLayout=QtWidgets.QGridLayout()
         fileSelect.setLayout(fileSelectLayout)
 
-        self.options['Save Directory']=QtGui.QLineEdit()
+        self.options['Save Directory']=QtWidgets.QLineEdit()
         self.options['Save Directory'].setPlaceholderText("Destination Directory")
-        self.stBrowse=QtGui.QPushButton('&Browse')
+        self.stBrowse=QtWidgets.QPushButton('&Browse')
 
-        self.connect(self.stBrowse,SIGNAL("released()"),lambda:self.folderSelect(self.options['Save Directory']))
+        self.stBrowse.released.connect(lambda:self.folderSelect(self.options['Save Directory']))
         
         fileSelectLayout.addWidget(self.options['Save Directory'],0,0)
         fileSelectLayout.addWidget(self.stBrowse,0,1)
@@ -1131,47 +1199,47 @@ class SettingsDialog(QtGui.QDialog):
         fileSelect.setContentsMargins(0, 0, 0, 0)
 
         optionsLayout.addRow("<b>Optional Settings:</b>",None)
-        self.options['anidb Username'] = QtGui.QLineEdit()
+        self.options['anidb Username'] = QtWidgets.QLineEdit()
         optionsLayout.addRow("anidb Username",self.options['anidb Username'])
 
-        self.options['anidb Password'] = QtGui.QLineEdit()
-        self.options['anidb Password'].setEchoMode(QtGui.QLineEdit.Password)
+        self.options['anidb Password'] = QtWidgets.QLineEdit()
+        self.options['anidb Password'].setEchoMode(QtWidgets.QLineEdit.Password)
         optionsLayout.addRow("anidb Password",self.options['anidb Password'])
 
-        self.options['Shana Project Username'] = QtGui.QLineEdit()
+        self.options['Shana Project Username'] = QtWidgets.QLineEdit()
         optionsLayout.addRow("Shana Project Username",self.options['Shana Project Username'])
 
-        self.options['Shana Project Password'] = QtGui.QLineEdit()
-        self.options['Shana Project Password'].setEchoMode(QtGui.QLineEdit.Password)
+        self.options['Shana Project Password'] = QtWidgets.QLineEdit()
+        self.options['Shana Project Password'].setEchoMode(QtWidgets.QLineEdit.Password)
         optionsLayout.addRow("Shana Project Password",self.options['Shana Project Password'])
 
 ##        optionsLayout.addRow("<b>Unreliable without an anidb account:</b>",None)
-        self.options['Season Sort']=QtGui.QCheckBox('Sort Episodes by Season')
+        self.options['Season Sort']=QtWidgets.QCheckBox('Sort Episodes by Season')
         optionsLayout.addRow(self.options['Season Sort'])
 
-        self.options['Poster Icons']=QtGui.QCheckBox('Use Poster Art for Folder Icons (Windows Only)')
+        self.options['Poster Icons']=QtWidgets.QCheckBox('Use Poster Art for Folder Icons (Windows Only)')
         if os.name!='nt':
                 self.options['Poster Icons'].setDisabled(True)
         optionsLayout.addRow(self.options['Poster Icons'])
 
-        self.options['Auto Hide Old']=QtGui.QCheckBox('Automatically Hide Older Series (~1 month old)')
+        self.options['Auto Hide Old']=QtWidgets.QCheckBox('Automatically Hide Older Series (~1 month old)')
         optionsLayout.addRow(self.options['Auto Hide Old'])
 
-        self.saveButton=QtGui.QPushButton('Save')
-        self.cancelButton=QtGui.QPushButton('Cancel')
+        self.saveButton=QtWidgets.QPushButton('Save')
+        self.cancelButton=QtWidgets.QPushButton('Cancel')
         
         confirmLayout.addWidget(self.saveButton,0,0)
         confirmLayout.addWidget(self.cancelButton,0,1)
         
-        self.connect(self.cancelButton,SIGNAL("released()"),self.close)
-        self.connect(self.saveButton,SIGNAL("released()"),self.saveValues)
+        self.cancelButton.released.connect(self.close)
+        self.saveButton.released.connect(self.saveValues)
 
         mainLayout.addWidget(top)
         mainLayout.addWidget(bottom)
         self.setLayout(mainLayout)
 
         for key in initialSettings:
-                if isinstance(self.options[key], QtGui.QCheckBox):
+                if isinstance(self.options[key], QtWidgets.QCheckBox):
                         self.options[key].setCheckState(initialSettings[key])
                 else:
                         self.options[key].setText(initialSettings[key])
@@ -1180,25 +1248,27 @@ class SettingsDialog(QtGui.QDialog):
         return self.result
 
     def folderSelect(self,destInput):
-        folder = QtGui.QFileDialog.getExistingDirectory(self, "Open Directory",
+        folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Open Directory",
                                                    ".",
-                                                   QtGui.QFileDialog.ShowDirsOnly|
-                                                   QtGui.QFileDialog.DontResolveSymlinks)
+                                                   QtWidgets.QFileDialog.ShowDirsOnly|
+                                                   QtWidgets.QFileDialog.DontResolveSymlinks)
         if folder:
             destInput.setText(folder)
 
     def saveValues(self):
         self.result={}
         for key in self.options:
-                if isinstance(self.options[key], QtGui.QCheckBox):
+                if isinstance(self.options[key], QtWidgets.QCheckBox):
                         self.result[key] = self.options[key].checkState()
                 else:
                         self.result[key] = str(self.options[key].text())# or None
         self.close()
         
-class StillRunningDialog(QtGui.QDialog):
+class StillRunningDialog(QtWidgets.QDialog):
     def __init__(self, parent=None):
-        from PyQt4.QtCore import Qt
+        from PyQt5.QtCore import Qt
+
+
         super(StillRunningDialog, self).__init__(parent)
         self.result=0
         self.setWindowTitle(self.tr("Application is still running!"))
@@ -1207,32 +1277,32 @@ class StillRunningDialog(QtGui.QDialog):
 ##        self.setAttribute(Qt.WA_DeleteOnClose)
 
 ##        mainLayout = QtGui.QGridLayout()
-        mainLayout = QtGui.QVBoxLayout()
+        mainLayout = QtWidgets.QVBoxLayout()
 ##        mainLayout.addStretch(1)
 
         mainLayout.setAlignment(Qt.AlignCenter)
 
-        optionsLayout = QtGui.QFormLayout()
-        confirmLayout = QtGui.QGridLayout()
+        optionsLayout = QtWidgets.QFormLayout()
+        confirmLayout = QtWidgets.QGridLayout()
 
-        top=QtGui.QWidget()
-        bottom=QtGui.QWidget()
+        top=QtWidgets.QWidget()
+        bottom=QtWidgets.QWidget()
         top.setLayout(optionsLayout)
         bottom.setLayout(confirmLayout)
         mainLayout.setAlignment(Qt.AlignCenter)
 
         optionsLayout.addRow('Alastore is still running, double click on the tray icon to show the main window again.\nRight click the tray icon to exit completely.',None)
-        self.dontshow=QtGui.QCheckBox('Don\'t show this message again.')
+        self.dontshow=QtWidgets.QCheckBox('Don\'t show this message again.')
         optionsLayout.addRow(self.dontshow)
         
-        self.saveButton=QtGui.QPushButton('OK')
+        self.saveButton=QtWidgets.QPushButton('OK')
 ##        confirmLayout.addWidget(QtGui.QSpacerItem(),0,0)
         confirmLayout.addWidget(self.saveButton,0,1)
         mainLayout.addWidget(top)
         mainLayout.addWidget(bottom)
         self.setLayout(mainLayout)
 
-        self.connect(self.saveButton,SIGNAL("released()"),self.saveValues)
+        self.saveButton.released.connect(self.saveValues)
         
     def getValues(self):
         return self.result
@@ -1241,9 +1311,11 @@ class StillRunningDialog(QtGui.QDialog):
         self.result=self.dontshow.checkState()
         self.close()
 
-class DropDialog(QtGui.QDialog):
+class DropDialog(QtWidgets.QDialog):
     def __init__(self, title, parent=None):
-        from PyQt4.QtCore import Qt
+        from PyQt5.QtCore import Qt
+
+
         super(DropDialog, self).__init__(parent)
         self.setWindowTitle(self.tr("Drop Series"))
         self.setWindowFlags(self.windowFlags() &~ Qt.WindowContextHelpButtonHint)
@@ -1251,15 +1323,15 @@ class DropDialog(QtGui.QDialog):
 ##        self.setAttribute(Qt.WA_DeleteOnClose)
 
 ##        mainLayout = QtGui.QGridLayout()
-        mainLayout = QtGui.QVBoxLayout()
+        mainLayout = QtWidgets.QVBoxLayout()
 ##        mainLayout.addStretch(1)
         mainLayout.setAlignment(Qt.AlignCenter)
 
-        optionsLayout = QtGui.QFormLayout()
-        confirmLayout = QtGui.QGridLayout()
+        optionsLayout = QtWidgets.QFormLayout()
+        confirmLayout = QtWidgets.QGridLayout()
 
-        top=QtGui.QWidget()
-        bottom=QtGui.QWidget()
+        top=QtWidgets.QWidget()
+        bottom=QtWidgets.QWidget()
         top.setLayout(optionsLayout)
         bottom.setLayout(confirmLayout)
         mainLayout.setAlignment(Qt.AlignCenter)
@@ -1267,11 +1339,11 @@ class DropDialog(QtGui.QDialog):
         optionsLayout.addRow('''You are about to drop the series: %s.
 This will delete your Shana Project follow and hide this series.
 Are you sure you want to drop %s?'''%(title,title),None)
-        self.deleteall=QtGui.QCheckBox('Also delete all episodes on my computer.')
+        self.deleteall=QtWidgets.QCheckBox('Also delete all episodes on my computer.')
         optionsLayout.addRow(self.deleteall)
         
-        self.confirmButton=QtGui.QPushButton('OK')
-        self.cancelButton=QtGui.QPushButton('Cancel')
+        self.confirmButton=QtWidgets.QPushButton('OK')
+        self.cancelButton=QtWidgets.QPushButton('Cancel')
 ##        confirmLayout.addWidget(QtGui.QSpacerItem(),0,0)
         confirmLayout.addWidget(self.confirmButton,0,1)
         confirmLayout.addWidget(self.cancelButton,0,2)
@@ -1279,8 +1351,8 @@ Are you sure you want to drop %s?'''%(title,title),None)
         mainLayout.addWidget(bottom)
         self.setLayout(mainLayout)
 
-        self.connect(self.confirmButton,SIGNAL("released()"),self.saveValues)
-        self.connect(self.cancelButton,SIGNAL("released()"),self.close)
+        self.confirmButton.released.connect(self.saveValues)
+        self.cancelButton.released.connect(self.close)
 
         self.confirm = 0
         self.delete = 0
@@ -1294,6 +1366,8 @@ Are you sure you want to drop %s?'''%(title,title),None)
         self.close()
         
 from qtrayico import Systray
+
+
 class trayIcon(Systray):
     def __init__(self,window,seriesManager):
         super(trayIcon,self).__init__(window)
@@ -1302,15 +1376,14 @@ class trayIcon(Systray):
     def createActions(self):
         self.actions=[]
 
-        self.updateAction= QtGui.QAction(self.tr("&Refresh"), self)
-        self.connect(self.updateAction, QtCore.SIGNAL("triggered()"),self.refresh)
+        self.updateAction= QtWidgets.QAction(self.tr("&Refresh"), self)
+        self.updateAction.triggered.connect(self.refresh)
         
-        self.configAction= QtGui.QAction(self.tr("&Config"), self)
-        self.connect(self.configAction, QtCore.SIGNAL("triggered()"),self.showConfig)
+        self.configAction= QtWidgets.QAction(self.tr("&Config"), self)
+        self.configAction.triggered.connect(self.showConfig)
         
-        self.helpAction= QtGui.QAction(self.tr("&Help"), self)
-        self.connect(self.helpAction, QtCore.SIGNAL("triggered()"),
-                     lambda:QtGui.QMessageBox.information(self,
+        self.helpAction= QtWidgets.QAction(self.tr("&Help"), self)
+        self.helpAction.triggered.connect(lambda:QtWidgets.QMessageBox.information(self,
                         "Guide",
 '''<style>
 dt {font-weight:bold;}
@@ -1392,12 +1465,10 @@ ul { margin: 0; padding: 0; }
         file and starting over (not recommended unless you are experiencing a severe bug or are doing something like
         changing to a different RSS feed).</li></ul>
 </dl>
-''')
-                     )
+'''))
                 
-        self.quitAction = QtGui.QAction(self.tr("&Quit"), self)
-        QtCore.QObject.connect(self.quitAction, QtCore.SIGNAL("triggered()"),
-        QtGui.qApp, QtCore.SLOT("quit()"))
+        self.quitAction = QtWidgets.QAction(self.tr("&Quit"), self)
+        self.quitAction.triggered.connect(QtWidgets.QApplication.quit)
         
         self.actions.append(self.updateAction)
         self.actions.append(self.configAction)
@@ -1428,6 +1499,8 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 from qtrayico import HideableWindow
+
+
 class HideableWithDialog(HideableWindow):
         def closeEvent(self,event):
                 super(HideableWithDialog,self).closeEvent(event)
@@ -1435,23 +1508,29 @@ class HideableWithDialog(HideableWindow):
                         
 
 import series
+
+
 if __name__ == '__main__':
     # chdir to the correct directory to ensure configs, etc. are loaded correctly.
     import os,sys
+
+
     try:
         sys._MEIPASS
         os.chdir(os.path.dirname(sys.argv[0]))
     except:
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
         
-    from PyQt4.QtGui import QApplication
+    from PyQt5.QtWidgets import QApplication
     import sys
+
+
 
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)#AAAAAAAAAA
     #app.setStyle( 'Plastique' )
     a=series.SeriesList()
-    main=HideableWithDialog()#QtGui.QMainWindow()
+    main=HideableWithDialog()#QtWidgets.QMainWindow()
 
     main.setWindowTitle('Alastore')
     main.setWindowIcon(QtGui.QIcon(resource_path("book.ico")))

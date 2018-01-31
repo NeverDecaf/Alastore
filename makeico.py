@@ -2,11 +2,11 @@
 import pyico
 import iconchange
 from PIL import Image
-import urllib2
+import urllib.request, urllib.error, urllib.parse
 import contextlib
 from xml.dom import minidom
 import gzip
-from StringIO import StringIO
+from io import StringIO
 import os
 import os.path
 import re
@@ -33,8 +33,8 @@ FAKE_HEADERS={
     }
 
 def download_picture(url):
-   request = urllib2.Request(url,None,FAKE_HEADERS)
-   with contextlib.closing(urllib2.urlopen(request)) as response:
+   request = urllib.request.Request(url,None,FAKE_HEADERS)
+   with contextlib.closing(urllib.request.urlopen(request)) as response:
         if response.info().get('Content-Encoding') == 'gzip':
                 buf = StringIO(response.read())
                 f = gzip.GzipFile(fileobj=buf)
