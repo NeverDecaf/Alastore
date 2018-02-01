@@ -78,7 +78,7 @@ import contextlib
 # returns a unicode filename as suggested by the given torrent file (bytesio or other buffer)
 def file_name(torrent_file):
 ##    metainfo = bencode.bdecode(torrent_file.read())
-    metainfo = lt.bdecode(f.read())
+    metainfo = lt.bdecode(torrent_file.read())
     info = metainfo[b'info']
     if b'files' in info:
             raise Exception('torrent contains multiple files')
