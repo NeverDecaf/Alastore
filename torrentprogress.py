@@ -75,7 +75,7 @@ import sys, os, hashlib, io#, bencode
 import contextlib
 ##from bencode import BTFailure
 
-# returns a unicode filename as suggested by the given torrent file (stringio or other buffer)
+# returns a unicode filename as suggested by the given torrent file (bytesio or other buffer)
 def file_name(torrent_file):
 ##    metainfo = bencode.bdecode(torrent_file.read())
     metainfo = lt.bdecode(f.read())
@@ -86,7 +86,7 @@ def file_name(torrent_file):
 
 
 #returns the percent completed of a SINGLE file torrent at filepath using the torrent, torrent.
-# torrent is a stream, suggested you pass a stringIO but you can pass a file handler as well
+# torrent is a stream, suggested you pass a bytesIO but you can pass a file handler as well
 # just note that this method will not close the torrent so be sure to clean it up yourself.
 # also make sure you open in binary mode if reading from a file.
 def percentCompleted(torrent_file,filepath):

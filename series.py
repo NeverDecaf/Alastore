@@ -19,6 +19,7 @@ import logging
 import errno
 from shana_interface import ShanaLink
 import stat
+import urllib
 
 class SeriesList:
     series=None
@@ -29,7 +30,7 @@ class SeriesList:
         if os.path.exists('DEBUG_TEST'):
             logging.basicConfig(level=logging.DEBUG, filename='DEBUG.log')
         else:
-            logging.basicConfig(level=logging.DEBUG, stream=io.StringIO())
+            logging.basicConfig(level=logging.DEBUG, stream=io.BytesIO())
             logging.disable(logging.DEBUG)
         self.SQL=sql.SQLManager()
         self.SQL.connect()
@@ -445,7 +446,11 @@ class SeriesList:
         # do anidb.titlecache or w/e
         self.titleList=None
         if self.titleUpdateTime:
-            self.titleList = anidb.anidb_title_list()
+            try:
+                self.titleList = anidb.anidb_title_list()
+            except (urllib.error.URLError,urllib.error.HTTPError) as e:
+                'banned or site is down'
+                print('failed to fetch anidb title list. (%r)'%e)
 
     def prepCacheTitles(self):
         self.titleUpdateTime = self.SQL.titleUpdateTime()

@@ -6,7 +6,7 @@ import urllib.request, urllib.error, urllib.parse
 import contextlib
 from xml.dom import minidom
 import gzip
-from io import StringIO
+from io import BytesIO
 import os
 import os.path
 import re
@@ -36,12 +36,12 @@ def download_picture(url):
    request = urllib.request.Request(url,None,FAKE_HEADERS)
    with contextlib.closing(urllib.request.urlopen(request)) as response:
         if response.info().get('Content-Encoding') == 'gzip':
-                buf = StringIO(response.read())
+                buf = BytesIO(response.read())
                 f = gzip.GzipFile(fileobj=buf)
                 data = f.read()
         else:
                 data=response.read()
-        im = StringIO(data)
+        im = BytesIO(data)
         lazyopen = Image.open(im)
         lazyopen.load()                 # fix for a bug in PIL 1.1.7
         return lazyopen
@@ -49,8 +49,8 @@ def download_picture(url):
 def makeIcon(aid,url,dest_folder):
     img = download_picture(url)
     img = resize_center_image(img)
-    buf = StringIO()
+    buf = BytesIO()
     img.save(buf, format="PNG")
-    ico = pyico.Icon([StringIO(buf.getvalue())],os.path.join(dest_folder,'%i.ico'%aid))
+    ico = pyico.Icon([BytesIO(buf.getvalue())],os.path.join(dest_folder,'%i.ico'%aid))
     ico.save()
     iconchange.seticon_unicode(dest_folder,'%i.ico'%aid,0) # dest_folder.encode('utf8') removed this and instead use seticon_unicode.
