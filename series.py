@@ -58,10 +58,10 @@ class SeriesList:
         for entry in self.newEntries:
             torrent = torrentprogress.download_torrent(entry[2])
             if torrent:
-                torrentdata=buffer(torrent)
+                torrentdata=torrent
                 try:
-                    filename = torrentprogress.file_name(io.StringIO(torrentdata))
-                except e:
+                    filename = torrentprogress.file_name(io.BytesIO(torrentdata))
+                except Exception as e:
                     print('initial bencode failed %r'%e)
                     print('pre-removing %s.'%entry[1])
                     self.removeInvalidTorrents.append((entry[2],len(torrentdata)))
@@ -148,13 +148,13 @@ class SeriesList:
                         if not torrentdata:
                             torrent = torrentprogress.download_torrent(episode['torrent_url'])
                             if torrent:
-                                torrentdata=buffer(torrent)
+                                torrentdata=torrent
                         if torrentdata:
 ##                            if match.group(2):
 ##                                path = path+match.group(2)
                             try:
-                                percent_downloaded, torrentdata=torrentprogress.percentCompleted(io.StringIO(torrentdata),path)
-                            except e:
+                                percent_downloaded, torrentdata=torrentprogress.percentCompleted(io.BytesIO(torrentdata),path)
+                            except Exception as e:
                                 print('bencode failed %r'%e)
                                 if len(torrentdata):
                                     print('episode (%s) was removed.'%episode['display_name'])
@@ -426,7 +426,7 @@ class SeriesList:
                 dayofseason = datetime.timedelta(dayofyear%91)
                 date -= dayofseason
                 date += sixtydays
-                seasonindex =(dayofyear-(dayofyear%91))/91
+                seasonindex =(dayofyear-(dayofyear%91))//91
                 seasonname= '%s %s'%(SEASONS[seasonindex],date.strftime('%Y'))
 
                 self.toGetSeriesInfoAdds.append((aid,airdate,seasonname,imgurl))

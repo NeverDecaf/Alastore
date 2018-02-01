@@ -44,7 +44,7 @@ def anidb_series_info(aid):
     request = urllib.request.Request(url,None,FAKE_HEADERS)
     with contextlib.closing(urllib.request.urlopen(request)) as response:
         if response.info().get('Content-Encoding') == 'gzip':
-                buf = io.StringIO(response.read())
+                buf = io.BytesIO(response.read())
                 f = gzip.GzipFile(fileobj=buf)
                 data = f.read()
         else:
@@ -64,7 +64,7 @@ def anidb_title_list():
     with contextlib.closing(urllib.request.urlopen(request)) as response:
 ##    with contextlib.closing(open('titles.xml','rb')) as response:
         if response.info().get('Content-Encoding') == 'gzip':
-            buf = io.StringIO(response.read())
+            buf = io.BytesIO(response.read())
             f = gzip.GzipFile(fileobj=buf)
             data = f.read()
         else:
@@ -354,4 +354,3 @@ class anidbInterface:
         self.socket.close()
         self.socket=None
         
-

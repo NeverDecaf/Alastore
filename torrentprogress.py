@@ -28,7 +28,7 @@ def download_magnet(url):
     if not handle.has_metadata():
         print("Could not create torrent from magnet")
         handle.pause()
-        ses.remove_torrent(handle)
+        ses.remove_torrent(handle,option=lt.options_t.delete_files)
 ##        del ses
         shutil.rmtree(tempdir)
         return None
@@ -42,7 +42,7 @@ def download_magnet(url):
 ##    torfile.set_creator(torinfo.creator())
     
     torcontent = lt.bencode(torfile.generate())
-    ses.remove_torrent(handle,options=lt.options_t.delete_files)
+    ses.remove_torrent(handle,option=lt.options_t.delete_files)
 ##    del ses
     shutil.rmtree(tempdir)
     return torcontent
@@ -53,6 +53,7 @@ def download_torrent(url):
             return download_magnet(url)
         except Exception as e:
             print(("There was an error downloading from the magnet link in torrentprogress.py: %r" % e))
+            raise
             return None
     request = urllib.request.Request(url, headers=HEADERS)
     try:
@@ -138,5 +139,3 @@ def percentCompleted(torrent_file,filepath):
 ##    reencode = bencode.bencode(metainfo)
     reencode = lt.bencode(metainfo)
     return int(100.*(totalpieces-piececount)/totalpieces) , reencode #buffer(reencode)
-
-
