@@ -145,7 +145,9 @@ class anidbInterface:
             print(("error with anidb add: %r"%e))
             return None
         #only need this if we are issuing another command.. but do it anyway just for safety
-        return aid
+        if aid==None:
+            return aid
+        return int(aid)
         
     def _setup(self):
         '''Sets up the UDP connection to anidb'''
