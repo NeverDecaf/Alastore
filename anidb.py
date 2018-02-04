@@ -355,5 +355,3 @@ class anidbInterface:
             return None
         self.socket.close()
         self.socket=None
-        
-print(anidb_series_info(1382))

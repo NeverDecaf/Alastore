@@ -53,5 +53,3 @@ def makeIcon(aid,url,dest_folder):
     ico = pyico.Icon([BytesIO(buf.getvalue())],os.path.join(dest_folder,'%i.ico'%aid))
     ico.save()
     iconchange.seticon_unicode(dest_folder,'%i.ico'%aid,0) # dest_folder.encode('utf8') removed this and instead use seticon_unicode.
-
-makeIcon(3536,'https://s7d1.scene7.com/is/image/PETCO/cat-category-090617-369w-269h-hero-cutout-d?fmt=png-alpha','.')
