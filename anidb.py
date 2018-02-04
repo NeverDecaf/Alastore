@@ -45,11 +45,11 @@ def anidb_series_info(aid):
     with contextlib.closing(urllib.request.urlopen(request)) as response:
         if response.info().get('Content-Encoding') == 'gzip':
                 buf = io.BytesIO(response.read())
-                f = gzip.GzipFile(fileobj=buf)
-                data = f.read()
+                data = gzip.GzipFile(fileobj=buf)
         else:
-                data=response.read()
-        xmldoc = minidom.parseString(data)
+                data=response
+        xmldoc = minidom.parse(data)
+##        xmldoc = minidom.parseString(data)
         if len(xmldoc.getElementsByTagName('error')):
             raise Exception('Anidb Error:',xmldoc.getElementsByTagName('error')[0].firstChild.nodeValue)
         imageurl = 'http://img7.anidb.net/pics/anime/%s'%xmldoc.getElementsByTagName('picture')[0].firstChild.nodeValue
@@ -356,3 +356,4 @@ class anidbInterface:
         self.socket.close()
         self.socket=None
         
+print(anidb_series_info(1382))

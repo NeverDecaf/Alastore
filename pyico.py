@@ -87,7 +87,7 @@ class Icon(object):
 
     def _build(self):
         self._ico_data = ""
-        self._img_data = ""
+        self._img_data = b""
 
         if not len(self.image_paths):
             raise Exception("No images added")

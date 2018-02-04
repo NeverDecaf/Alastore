@@ -37,11 +37,10 @@ def download_picture(url):
    with contextlib.closing(urllib.request.urlopen(request)) as response:
         if response.info().get('Content-Encoding') == 'gzip':
                 buf = BytesIO(response.read())
-                f = gzip.GzipFile(fileobj=buf)
-                data = f.read()
+                im = gzip.GzipFile(fileobj=buf)
         else:
-                data=response.read()
-        im = BytesIO(data)
+                im = response
+##        im = BytesIO(data)
         lazyopen = Image.open(im)
         lazyopen.load()                 # fix for a bug in PIL 1.1.7
         return lazyopen
@@ -54,3 +53,5 @@ def makeIcon(aid,url,dest_folder):
     ico = pyico.Icon([BytesIO(buf.getvalue())],os.path.join(dest_folder,'%i.ico'%aid))
     ico.save()
     iconchange.seticon_unicode(dest_folder,'%i.ico'%aid,0) # dest_folder.encode('utf8') removed this and instead use seticon_unicode.
+
+makeIcon(3536,'https://s7d1.scene7.com/is/image/PETCO/cat-category-090617-369w-269h-hero-cutout-d?fmt=png-alpha','.')
