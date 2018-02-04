@@ -774,7 +774,11 @@ class AccordianWidget( QScrollArea ):
                 self.waitThenFUpdate()
                 self.lock.unlock()
                 raise
-            self.thread.start()
+            try:
+                self.thread.start()
+            except:
+                self.lock.unlock()
+                raise
 
         def fileUpdateEnd(self,quick):
             try:
@@ -806,7 +810,11 @@ class AccordianWidget( QScrollArea ):
             except:
                 self.lock.unlock()
                 raise
-            self.thread.start()
+            try:
+                self.thread.start()
+            except:
+                self.lock.unlock()
+                raise
 
         def updateMid0(self,quick):
             #create the business thread
@@ -818,7 +826,11 @@ class AccordianWidget( QScrollArea ):
             except:
                 self.lock.unlock()
                 raise
-            self.thread.start()
+            try:
+                self.thread.start()
+            except:
+                self.lock.unlock()
+                raise
             
         def updateMid1(self,quick):
             #create the business thread
@@ -836,7 +848,11 @@ class AccordianWidget( QScrollArea ):
             except:
                 self.lock.unlock()
                 raise
-            self.thread.start()
+            try:
+                self.thread.start()
+            except:
+                self.lock.unlock()
+                raise
 
         def updateMid2(self,quick):
             #create the business thread
@@ -854,7 +870,11 @@ class AccordianWidget( QScrollArea ):
             except:
                 self.lock.unlock()
                 raise
-            self.thread.start()
+            try:
+                self.thread.start()
+            except:
+                self.lock.unlock()
+                raise
 
         def updateEnd(self,quick):
             try:
