@@ -531,8 +531,3 @@ class SeriesList:
             self.getSeriesInfo()
             self.makeIcon()
         return changes
-
-if __name__=='__main__':
-    s=SeriesList()
-    s.prepAnidbAdd()
-    s.ianidbAdd()
