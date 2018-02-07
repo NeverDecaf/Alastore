@@ -74,14 +74,15 @@ def download_torrent(url):
 import sys, os, hashlib, io#, bencode
 import contextlib
 ##from bencode import BTFailure
-
+class BatchTorrentException(Exception):
+    pass
 # returns a unicode filename as suggested by the given torrent file (bytesio or other buffer)
 def file_name(torrent_file):
 ##    metainfo = bencode.bdecode(torrent_file.read())
     metainfo = lt.bdecode(torrent_file.read())
     info = metainfo[b'info']
     if b'files' in info:
-            raise Exception('torrent contains multiple files')
+            raise BatchTorrentException('torrent contains multiple files')
     return info[b'name'].decode('utf8')
 
 

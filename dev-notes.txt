@@ -1,21 +1,12 @@
 #### Extra Notes (for devs)
-First, my apologies about the generally digusting and amateruish spaghetti code, I am not a professional.
 
-In theory Alastore should work in linux as it uses Qt but you may need to do some debugging to get UI elements like the tray icon to
-look right or even show up at all.
+Alastore 1.x.x worked on linux, 2.x.x is untested
+Both use Qt so should work in theory but you may encounter some issues (for example the tray icon wouldn't show up or was misaligned in some distros)
 
-If Alastore starts to become a memory hog delete your db and start over (Haven't added any sort of pruning yet; after using it for 
-around 4 years and watching 10-20 shows a season it uses ~100Mb of RAM)
+Alastore does not prune the episode database. After 5+ years of use I have yet to notice a performance hit.
 
 It should be possible to "port" Alastore to other RSS feeds or database sites.
 Switching from shanaproject to, say, bakabt should be as easy as modifying the rss.py file.
 Switching from anidb may prove slightly more difficult but is far from impossible (anidb.py would be a good place to start)
 
-Be careful with anything involving anidb as it is very easy to get banned.
-
-If you wish to make an exe with pyinstaller you must first run
-pyi-makespec Alastore.py then edit the spec to add [(r'book.ico',r'book.ico','DATA')] as an arugment to EXE()
-the full series of commands is:
-pyi-makespec --onefile --noconsole --name=Alastore --icon=book.ico Alastore.py
-(edit the spec file now)
-pyinstaller --clean --noconfirm Alastore.spec
+Be careful with anything involving anidb as it is VERY easy to get banned. please use your own anidb udp/http client so alastore's isn't banned as well.
