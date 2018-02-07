@@ -642,7 +642,7 @@ class TreeView(QtWidgets.QTreeView):
 class ItemDelegate(QtWidgets.QStyledItemDelegate):
     listPadding = (0,2)#padding that will go around the sides of the list. you only get horizontal and vertical
     textPadding = (6,4)#inner padding basically. between the sides of the box and the text inside. ( this is left and right padding where the above is horiz and verti)
-    textVertPadding = 7 # total vertical space (top and bot combined)
+    textVertPadding = 6 # total vertical space (top and bot combined)
     
     def paint(self,painter,option,index):
         from PyQt5.QtCore       import Qt, QRect
@@ -720,7 +720,7 @@ class ItemDelegate(QtWidgets.QStyledItemDelegate):
         if not index.parent().isValid():
             painter.drawText( x + h + self.textPadding[0], y , w - self.textPadding[0]-self.textPadding[1]-h, h, Qt.AlignLeft | Qt.AlignVCenter, text)
         else:
-            painter.drawText( x + self.textPadding[0], y , w - self.textPadding[0]-self.textPadding[1], h, Qt.AlignLeft | Qt.AlignVCenter, text)
+            painter.drawText( x + self.textPadding[0], y, w - self.textPadding[0]-self.textPadding[1], h, Qt.AlignLeft | Qt.AlignVCenter, text)
         painter.restore()
         
     def sizeHint(self, option, index):
@@ -730,7 +730,7 @@ class ItemDelegate(QtWidgets.QStyledItemDelegate):
         else:
             return QtCore.QSize(option.rect.width()+option.rect.x(),fontMetrics.height()+self.textVertPadding-self.listPadding[1])
         
-    def getHeight(self, fontMetrics):
+    def getHeaderHeight(self, fontMetrics):
         return fontMetrics.height()+self.textVertPadding+self.listPadding[1]*2
 
 class SingleFunction(QtCore.QRunnable):
@@ -853,8 +853,6 @@ class FullUpdate(QtCore.QRunnable):
                         self._sql.updateHash(file,ed2k,filesize)
                         self._writelock.unlock()
 
-            print('phase 1 gap')
-
             # parse your rss feed and add new episodes
             user_settings = self._sql.getSettings()
             rssitems = rss.RSSReader().getFiles(user_settings['RSS Feed'])
@@ -892,8 +890,6 @@ class FullUpdate(QtCore.QRunnable):
                     self._writelock.unlock()
             if len(newEntries):
                 self._signals.dataModified.emit()
-                
-            print('phase 1 done')
 
             # anidb adds
             if not quick:
@@ -967,8 +963,6 @@ class FullUpdate(QtCore.QRunnable):
                         self._signals.updateEpisode.emit((episode['id'],episode['torrent_url']))
                         self._writelock.unlock()
 
-            print('phase 2 done')
-
             # get series info for new aids
             # download poster art as well
             if not quick:
@@ -1028,7 +1022,6 @@ class FullUpdate(QtCore.QRunnable):
                             self._writelock.relock()
                             self._sql.updateCoverArts(((icon['aid'],None),))
                             self._writelock.unlock()
-            print('phase 3 done')
             self._signals.finished.emit()
 
 class SettingsDialog(QtWidgets.QDialog):
@@ -1136,7 +1129,7 @@ class SettingsDialog(QtWidgets.QDialog):
         mainLayout.addWidget(bottom)
         self.setLayout(mainLayout)
 
-        for key in initialSettings:
+        for key in initialSettings.keys():
                 if isinstance(self.options[key], QtWidgets.QCheckBox):
                         self.options[key].setCheckState(initialSettings[key])
                 else:
@@ -1394,6 +1387,8 @@ if __name__ == '__main__':
     else:
         logging.basicConfig(level=logging.DEBUG, stream=io.BytesIO())
         logging.disable(logging.DEBUG)
+        
+    with closing(sql.SQLManager(createtables = True)) as s:pass
     
     app = QtWidgets.QApplication(sys.argv)
 ##    app.setStyle("plastique")
@@ -1415,8 +1410,8 @@ if __name__ == '__main__':
     treeView.setItemDelegate(delegate)
     treeView.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
     treeView.doubleClicked.connect(model.dblClickEvent)
-    treeView.resize(QtCore.QSize(350,delegate.listPadding[1]+delegate.getHeight(treeView.fontMetrics())*rootNode.childCount()))
-    treeView.setIndentation(delegate.getHeight(treeView.fontMetrics()))
+    treeView.resize(QtCore.QSize(350,delegate.listPadding[1]+delegate.getHeaderHeight(treeView.fontMetrics())*rootNode.childCount()))
+    treeView.setIndentation(delegate.getHeaderHeight(treeView.fontMetrics()))
     treeView.setModel(model)
     
     model.sort(0)
@@ -1448,12 +1443,10 @@ if __name__ == '__main__':
     tray = trayIcon(main,model,writelock)
 
     main.setCentralWidget(treeView)
-    main.resize(QtCore.QSize(350,delegate.listPadding[1]+delegate.getHeight(treeView.fontMetrics())*rootNode.childCount()))
+    main.resize(QtCore.QSize(350,delegate.listPadding[1]+delegate.getHeaderHeight(treeView.fontMetrics())*rootNode.childCount()))
 ##    main.move(QtCore.QPoint(main.pos().x(),0))
     if '-q' not in sys.argv and '/q' not in sys.argv and '/silent' not in sys.argv:
         main.show()
     app.setQuitOnLastWindowClosed(False)
-    s = sql.SQLManager(createtables = True)
-    s.close()
     
     sys.exit(app.exec_())

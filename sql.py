@@ -258,12 +258,14 @@ custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shan
         self.cursor.execute('''SELECT title from shana_series WHERE verified_aid=0 AND aid_update<strftime('%s', 'now')-? AND last_update>strftime('%s', 'now')-? ORDER BY CASE WHEN aid IS NULL THEN 0 ELSE aid_update+1 END LIMIT 1''',(AID_UPDATE_TIME,LAST_UPDATE_TIME))
         title = self.cursor.fetchone()
         if not title:
-            return
-        self.cursor.execute('''UPDATE shana_series SET aid_update=strftime('%s', 'now'),aid=(SELECT aid FROM (SELECT aid,alphatitle,alphainput,dist, CASE WHEN ilen>tlen THEN ilen-5 ELSE tlen-5 END AS goaldist FROM (SELECT aid,alphatitle,alphainput,editdist(alphatitle,alphainput) AS dist, LENGTH(alphainput) AS ilen, LENGTH(alphatitle) as tlen
- FROM (SELECT aid,removeNonAlphaAndSpaces(title) AS alphatitle,removeNonAlphaAndSpaces(?) AS alphainput FROM
-	titles WHERE title=?))) WHERE alphatitle=alphainput COLLATE NOCASE OR dist < goaldist OR dist < 1 ORDER BY dist ASC LIMIT 1) where title=?''',[title['title']]*3)
+            return     
+        self.cursor.execute('''UPDATE shana_series SET aid_update=strftime('%s', 'now'),aid=(
+SELECT aid FROM (
+    SELECT aid,editdist(alphatitle,alphainput) AS dist, ABS(LENGTH(alphainput)-LENGTH(alphatitle))+2 AS goaldist FROM (
+        SELECT aid,removeNonAlphaAndSpaces(title) AS alphatitle,removeNonAlphaAndSpaces(?) AS alphainput FROM titles
+        )
+    ) WHERE dist <= goaldist ORDER BY dist ASC, aid DESC LIMIT 1) where title=?''',[title['title']]*2)
         self.conn.commit()
-        return
     
     def setDownloading(self,torrent_url,filename,torrentdata,percent_downloaded):
         path=(os.path.join(self.getSettings()['Download Directory'],filename))
@@ -346,15 +348,27 @@ custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shan
     '''also note: if you choose to return an aid regardless of its verified state, the series method
     ianidbadd will not function correctly as it only updates the aids for series which reportedly do not have one (null/none)
     therefore you will have to modify that method to always update aids'''
-    # some clarification: an add attempt is made based on the last add attempt. the formula is: gap since last add = number of days since file was added/24 in hours.
-    # in other words, a file that was hashed 200 days ago will wait 200 hours between successive anidb add attempts.
-    # min is equiv to one day (so min of 1 hr between adds)
+    # some clarification: an add attempt is made based on the last add attempt. the formula is: gap since last add = number of days since file was added /2  in hours.
+    # in other words, a file that was hashed 200 days ago will wait 400 hours between successive anidb add attempts.
+    # min is equiv to one day (so min of 2 hr between adds)
+
+    # there is now a "force_generic_add" logic in place:
+    # if a series has not been aid_verified for LAST_UPDATE_TIME since the series ended
+    # (and it has an aid (guess) from updateoneunknownaid)
+    # this function will return an aid instead of None which will in turn cause the generic add to go through despite the unverified aid.
+    # this has a chance of mistakenly generic adding wrong series (will mostly be season 2 eps getting added as s2, etc)
+    # this should rarely happen though, only if you maybe drop a s2 after 1 episode or something
+
+    # the point of this force generic add feature is to prevent episodes just rotting in parse_data forever and never getting added while spamming anidb the whole time.
     def getToAdd(self):
         settings=self.getSettings()
         if not settings or not settings['anidb Username']:
             return None,[]
-        self.cursor.execute('''SELECT path,CASE WHEN verified_aid=0 THEN NULL ELSE aid END AS aid,subgroup AS `group`,episode AS epno,ed2k,parse_data.id AS id,added_on<strftime('%s', 'now')-? as do_generic_add
-                                FROM parse_data JOIN shana_series WHERE shana_series.id=parse_data.id AND ed2k NOT NULL AND strftime('%s', 'now') - 3600*((strftime('%s', 'now')-added_on)/86400+1) > last_add_attempt''', (ANIDB_WAIT_TIME,))
+        self.cursor.execute('''SELECT path,
+CASE WHEN verified_aid=0 AND last_update>strftime('%s', 'now')-? THEN NULL
+ELSE aid END AS aid
+,subgroup AS `group`,episode AS epno,ed2k,parse_data.id AS id,added_on<strftime('%s', 'now')-? as do_generic_add
+                                FROM parse_data JOIN shana_series WHERE shana_series.id=parse_data.id AND ed2k NOT NULL AND strftime('%s', 'now') - 2*3600*((strftime('%s', 'now')-added_on)/86400+1) > last_add_attempt''', (LAST_UPDATE_TIME,ANIDB_WAIT_TIME))
         result = self.cursor.fetchall()
         for file in result:
             self.cursor.execute('''UPDATE parse_data SET last_add_attempt=strftime('%s', 'now') WHERE ed2k=?''',(file['ed2k'],)) # go back in and updated the last_add_attempt of everything we are adding
@@ -370,3 +384,51 @@ custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shan
         for pair in aids:
             self.cursor.execute('''UPDATE shana_series SET aid=?,verified_aid=1 WHERE id=?''',pair)
         self.conn.commit()
+        
+##    def debToAdd(self):
+##        settings=self.getSettings()
+##        if not settings or not settings['anidb Username']:
+##            return None,[]
+##        self.cursor.execute('''SELECT path,
+##CASE WHEN verified_aid=0 AND last_update>strftime('%s', 'now')-? THEN NULL
+##ELSE aid END AS aid
+##,subgroup AS `group`,episode AS epno,ed2k,parse_data.id AS id,added_on<strftime('%s', 'now')-? as do_generic_add
+##                                FROM parse_data JOIN shana_series WHERE shana_series.id=parse_data.id AND ed2k NOT NULL''', (LAST_UPDATE_TIME,ANIDB_WAIT_TIME))
+##        result = self.cursor.fetchall()
+####        for file in result:
+####            self.cursor.execute('''UPDATE parse_data SET last_add_attempt=strftime('%s', 'now') WHERE ed2k=?''',(file['ed2k'],)) # go back in and updated the last_add_attempt of everything we are adding
+##        self.conn.commit()
+##        return settings,result
+##    def updateaawnAid(self,id,official):
+##        self.cursor.execute('''SELECT title from shana_series WHERE id=?''',(id,))
+##        title = self.cursor.fetchone()
+##        print('-----',title['title'],'-----')
+##        if not title:
+##            return     
+##        self.cursor.execute('''
+##SELECT aid,alphatitle,alphainput,dist,goaldist FROM (
+##    SELECT aid,alphatitle,alphainput,editdist(alphatitle,alphainput) AS dist, ABS(LENGTH(alphainput)-LENGTH(alphatitle)) AS goaldist FROM (
+##        SELECT aid,removeNonAlphaAndSpaces(title) AS alphatitle,removeNonAlphaAndSpaces(?) AS alphainput FROM titles
+##        )
+##    ) WHERE dist <= goaldist ORDER BY dist ASC, aid DESC LIMIT 1''',[title['title']]*1)
+##        for res in self.cursor.fetchall():
+##            
+##            if not (res['aid']==official):
+##                print(res['aid'],'=/=',official)
+##                print(res['alphatitle'],res['alphainput'],res['aid'],res['dist'],res['goaldist'])
+##        self.conn.commit()
+##s=SQLManager()
+##s.cursor.execute('SELECT id,aid,verified_aid from shana_series')
+##s.cursor.execute('SELECT id,path from parse_data')
+##for res in s.cursor.fetchall():
+##    s.updateaawnAid(res['id'],res['path'])
+##for res in s.cursor.fetchall():
+##    s.updateaawnAid(res['id'],res['aid'])
+##s.updateaawnAid(37,'hi')
+##s.updateaawnAid(437)
+    
+##sets,adds = s.debToAdd()
+####print(sets,len(adds))
+##for datum in adds:
+##    print(datum['id'],datum['path'],datum['aid'],datum['do_generic_add'])
+
