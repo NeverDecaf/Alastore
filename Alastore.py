@@ -1211,7 +1211,7 @@ class FullUpdate(QtCore.QRunnable):
             
             toHash = self._sql.getUnhashed()
             hasherrors=0
-            print('hashing',len(toHash),'files')
+##            print('hashing',len(toHash),'files')
             for file in toHash:
                 ed2k = None
                 try:
@@ -1224,7 +1224,7 @@ class FullUpdate(QtCore.QRunnable):
                     self._sql.updateHash(file,ed2k,filesize)
                     self._writelock.unlock()
         #phase1gap
-        print('phase 1 done (lol)')
+        print('phase 1 gap')
 
         # parse your rss feed and add new episodes
         user_settings = self._sql.getSettings()
@@ -1396,8 +1396,6 @@ class FullUpdate(QtCore.QRunnable):
                 
 
                 '''hashes the selected files, also downloads poster art if applicable'''
-    ##            successfulIcons=[]
-                print('updating icons:',newIcons)
                 for icon in newIcons:
                     folder_title = r''.join(i for i in icon['title'] if i not in r'\/:*?"<>|.')
                     dest_folder = os.path.join(user_settings['Save Directory'],folder_title)

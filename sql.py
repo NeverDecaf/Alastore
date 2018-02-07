@@ -309,9 +309,9 @@ custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shan
         title = self.cursor.fetchone()
         if not title:
             return
-        self.cursor.execute('''UPDATE shana_series SET aid_update=strftime('%s', 'now'),aid=(SELECT aid, CASE WHEN ilen>tlen THEN ilen ELSE tlen END AS goaldist FROM (SELECT aid,alphatitle,alphainput,editdist(alphatitle,alphainput) AS dist, LENGTH(alphainput) AS ilen, LENGTH(alphatitle) as tlen
+        self.cursor.execute('''UPDATE shana_series SET aid_update=strftime('%s', 'now'),aid=(SELECT aid FROM (SELECT aid,alphatitle,alphainput,dist, CASE WHEN ilen>tlen THEN ilen-5 ELSE tlen-5 END AS goaldist FROM (SELECT aid,alphatitle,alphainput,editdist(alphatitle,alphainput) AS dist, LENGTH(alphainput) AS ilen, LENGTH(alphatitle) as tlen
  FROM (SELECT aid,removeNonAlphaAndSpaces(title) AS alphatitle,removeNonAlphaAndSpaces(?) AS alphainput FROM
-	titles WHERE title=?) ) WHERE alphatitle=alphainput COLLATE NOCASE OR dist < goaldist OR dist < 1 ORDER BY dist ASC LIMIT 1) where title=?''',[title['title']]*3)
+	titles WHERE title=?))) WHERE alphatitle=alphainput COLLATE NOCASE OR dist < goaldist OR dist < 1 ORDER BY dist ASC LIMIT 1) where title=?''',[title['title']]*3)
         self.conn.commit()
         return
     
@@ -426,5 +426,3 @@ custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shan
         for pair in aids:
             self.cursor.execute('''UPDATE shana_series SET aid=?,verified_aid=1 WHERE id=?''',pair)
         self.conn.commit()
-
-
