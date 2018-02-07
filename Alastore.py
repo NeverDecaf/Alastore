@@ -17,6 +17,7 @@ import sql
 import shutil
 import sys,subprocess, os # for watchfile
 import logging
+from contextlib import closing
 
 from shana_interface import ShanaLink
 ##WRITELOCK_TIMEOUT = 60
@@ -253,61 +254,61 @@ class TreeModel(QtCore.QAbstractItemModel):
 ##                    t._signals.finishedWithErrors.connect(lambda: QtWidgets.QMessageBox.information(parent,self.tr('Drop Failed'),self.tr('Could not connect to Shana Project to drop {}, check your login credentials and internet connection.').format(index.internalPointer().title())))
                     self._threadpool.start(t)
                 def playmove(user_settings, index):
-                    sqlmanager = sql.SQLManager()
-                    def moveAllToFolder(dest_path):
-                        dest = os.path.dirname(dest_path)
-                        episodes = sqlmanager.getAllWatchedPaths(dest)
-                        for episode in episodes:
-                            path = episode[0]
-                            directory = os.path.dirname(path)
-                            filename = os.path.basename(path)
-                            if directory!=dest and os.path.exists(directory):
-                                destfile = os.path.join(dest,filename)
-                                try:
-                                    shutil.move(path,destfile)
-                                    sqlmanager.changePath(path,destfile)
-                                except IOError as e:
-                                    print('failed to move file: %r'%e)
-                                TreeModel.cleanFolder(directory)                        
-                    shana_title = index.internalPointer().title()#self.SQL.getSeriesTitle(data['id'])#.decode('utf8')
-                    st_dir = user_settings['Save Directory']#.decode('utf8')
-                    folder_title = r''.join(i for i in shana_title if i not in r'\/:*?"<>|.')
+                    with closing(sql.SQLManager()) as sqlmanager:
+                        def moveAllToFolder(dest_path):
+                            dest = os.path.dirname(dest_path)
+                            episodes = sqlmanager.getAllWatchedPaths(dest)
+                            for episode in episodes:
+                                path = episode[0]
+                                directory = os.path.dirname(path)
+                                filename = os.path.basename(path)
+                                if directory!=dest and os.path.exists(directory):
+                                    destfile = os.path.join(dest,filename)
+                                    try:
+                                        shutil.move(path,destfile)
+                                        sqlmanager.changePath(path,destfile)
+                                    except IOError as e:
+                                        print('failed to move file: %r'%e)
+                                    TreeModel.cleanFolder(directory)                        
+                        shana_title = index.internalPointer().title()#self.SQL.getSeriesTitle(data['id'])#.decode('utf8')
+                        st_dir = user_settings['Save Directory']#.decode('utf8')
+                        folder_title = r''.join(i for i in shana_title if i not in r'\/:*?"<>|.')
 
-                    # check usersettings for usesubfolders.
-                    # if true/false move existing files from one to the other
+                        # check usersettings for usesubfolders.
+                        # if true/false move existing files from one to the other
 
-                    toplevel_folder = os.path.join(st_dir,folder_title)
-                    season=index.internalPointer().season()#self.SQL.getSeriesSeason(data['id'])
-                    if season:
-                        year = season.split()[1]
-                        seasonsorted_folder = os.path.join(st_dir,year,season,folder_title)
+                        toplevel_folder = os.path.join(st_dir,folder_title)
+                        season=index.internalPointer().season()#self.SQL.getSeriesSeason(data['id'])
+                        if season:
+                            year = season.split()[1]
+                            seasonsorted_folder = os.path.join(st_dir,year,season,folder_title)
+                            
                         
-                    
-                    if user_settings['Season Sort'] and season:
-                        dest_folder = seasonsorted_folder
-                    else:
-                        dest_folder = toplevel_folder
+                        if user_settings['Season Sort'] and season:
+                            dest_folder = seasonsorted_folder
+                        else:
+                            dest_folder = toplevel_folder
 
-                    dest_file = os.path.join(dest_folder,index.internalPointer().file_name())
-                    
-                    if not os.path.isdir(dest_folder):
-                        os.makedirs(dest_folder)
-                    if not os.path.exists(dest_file):
-                        shutil.move(index.internalPointer().path(),dest_file)#.decode('utf8'),dest_file)
-                    self.watchfile(dest_file)
-                    # we also want to get the ed2k hash asap in case you decide to drop the series right after watching an episode.
-                    try:
-                        ed2k,filesize=None,None
-                        ed2k,filesize=anidb.anidbInterface.ed2k_hash(dest_file)
-                    except Exception as e:
-                        print('Error hashing file (initial hash) %s; %r'%(dest_file,e))
-                    # cant reach this state now if path!='watched'
-##                    print('sql move placeholder')
-                    sqlmanager.watchMoveQueue(index.internalPointer().path(),dest_file,ed2k,filesize)
-                    try:
-                        moveAllToFolder(dest_file)
-                    except Exception as e:
-                        print('Unexpected error, moveAllToFolder failed: %r'%e)
+                        dest_file = os.path.join(dest_folder,index.internalPointer().file_name())
+                        
+                        if not os.path.isdir(dest_folder):
+                            os.makedirs(dest_folder)
+                        if not os.path.exists(dest_file):
+                            shutil.move(index.internalPointer().path(),dest_file)#.decode('utf8'),dest_file)
+                        self.watchfile(dest_file)
+                        # we also want to get the ed2k hash asap in case you decide to drop the series right after watching an episode.
+                        try:
+                            ed2k,filesize=None,None
+                            ed2k,filesize=anidb.anidbInterface.ed2k_hash(dest_file)
+                        except Exception as e:
+                            print('Error hashing file (initial hash) %s; %r'%(dest_file,e))
+                        # cant reach this state now if path!='watched'
+    ##                    print('sql move placeholder')
+                        sqlmanager.watchMoveQueue(index.internalPointer().path(),dest_file,ed2k,filesize)
+                        try:
+                            moveAllToFolder(dest_file)
+                        except Exception as e:
+                            print('Unexpected error, moveAllToFolder failed: %r'%e)
 
     # BE VERY CAREFUL WITH THIS.
     @staticmethod
@@ -349,7 +350,7 @@ Are you sure you wish to hide the following series?
                 self._writelock.unlock()
                 self.sqlDataChanged()
             else:
-                t = SingleFunction(lambda:sql.SQLManager().hideSeries(index.internalPointer().id()),self._writelock)
+                t = SQLSingleFunction(self._writelock,'hideSeries',index.internalPointer().id())
                 t._signals.finished.connect(self.sqlDataChanged)
                 self._threadpool.start(t)
 
@@ -369,7 +370,7 @@ Are you sure you wish to mark all episodes of {} as watched?
                 self._writelock.unlock()
                 self.sqlDataChanged()
             else:
-                t = SingleFunction(lambda:sql.SQLManager().forceWatched(id = index.internalPointer().id()),self._writelock)
+                t = SQLSingleFunction(self._writelock,'forceWatched',id=index.internalPointer().id())
                 t._signals.finished.connect(self.sqlDataChanged)
                 self._threadpool.start(t)
                 
@@ -385,7 +386,7 @@ You should only use this option if a file fails to download or is moved/deleted 
                 self._writelock.unlock()
                 self.updateEpisodeByIndex(index)
             else:
-                t = SingleFunction(lambda:sql.SQLManager().forceWatched(torrenturl = index.internalPointer().torrent_url()),self._writelock)
+                t = SQLSingleFunction(self._writelock,'forceWatched',torrenturl = index.internalPointer().torrent_url())
                 t._signals.finished.connect(lambda: self.updateEpisodeByIndex(index))
                 self._threadpool.start(t)
                 
@@ -399,30 +400,30 @@ You should only use this option if a file fails to download or is moved/deleted 
             t._signals.finishedWithErrors.connect(lambda: QtWidgets.QMessageBox.information(parent,self.tr('Drop Failed'),self.tr('Could not connect to Shana Project to drop {}, check your login credentials and internet connection.').format(index.internalPointer().title())))
             self._threadpool.start(t)
         def dropfunc(shanalink,index,parent):
-            _sql = sql.SQLManager()
-            user_settings = _sql.getSettings()
-            title = index.internalPointer().title()
-            id = index.internalPointer().id()
-            # is shanalink threadsafe?
-            if user_settings['Shana Project Username'] and user_settings['Shana Project Password']:
-                shanalink.update_creds(user_settings['Shana Project Username'],user_settings['Shana Project Password'])
-                success = 0
-                try:
-##                    raise(Exception())
-                    success = shanalink.delete_follow(title)
-                except Exception as e:
-                    print('Error dropping series: %r'%e)
-                    raise
-                if success:
-                    _sql.hideSeries(id)
-                    if delete:
-                        paths = _sql.getAllPaths(id)
-                        for path in paths:
-                            directory = os.path.dirname(path[0])
-                            if os.path.isfile(path[0]):
-                                os.remove(path[0])
-                            TreeModel.cleanFolder(directory)
-                        _sql.dropSeries(id)
+            with closing(sql.SQLManager()) as _sql:
+                user_settings = _sql.getSettings()
+                title = index.internalPointer().title()
+                id = index.internalPointer().id()
+                # is shanalink threadsafe?
+                if user_settings['Shana Project Username'] and user_settings['Shana Project Password']:
+                    shanalink.update_creds(user_settings['Shana Project Username'],user_settings['Shana Project Password'])
+                    success = 0
+                    try:
+    ##                    raise(Exception())
+                        success = shanalink.delete_follow(title)
+                    except Exception as e:
+                        print('Error dropping series: %r'%e)
+                        raise
+                    if success:
+                        _sql.hideSeries(id)
+                        if delete:
+                            paths = _sql.getAllPaths(id)
+                            for path in paths:
+                                directory = os.path.dirname(path[0])
+                                if os.path.isfile(path[0]):
+                                    os.remove(path[0])
+                                TreeModel.cleanFolder(directory)
+                            _sql.dropSeries(id)
                     
 ##                    self.sqlDataChanged() # emit this instead
 ##                    emit finished
@@ -439,7 +440,7 @@ You should only use this option if a file fails to download or is moved/deleted 
                     self._sqlManager.setShowAgain(showagain)
                     self._writelock.unlock()
                 else:
-                    t = SingleFunction(lambda:sql.SQLManager().setShowAgain(showagain),self._writelock)
+                    t = SQLSingleFunction(self._writelock,'setShowAgain',showagain)
                     self._threadpool.start(t)
                     
     def configDialog(self,parent):
@@ -452,7 +453,7 @@ You should only use this option if a file fails to download or is moved/deleted 
                 self._sqlManager.saveSettings(*[settings[key] for key in self._sqlManager.COLUMN_NAMES])
                 self._writelock.unlock()
             else:
-                t = SingleFunction(lambda:sql.SQLManager().saveSettings(*[settings[key] for key in self._sqlManager.COLUMN_NAMES]),self._writelock)
+                t = SQLSingleFunction(self._writelock,'saveSettings',*[settings[key] for key in self._sqlManager.COLUMN_NAMES])
                 self._threadpool.start(t)
         d.deleteLater()
 
@@ -1008,7 +1009,6 @@ class ItemDelegate(QtWidgets.QStyledItemDelegate):
 ##        pass
 ##    def setEditorData(self,editor,index):
 ##        pass
-
 class SingleFunction(QtCore.QRunnable):
     '''
     Worker thread
@@ -1033,6 +1033,33 @@ class SingleFunction(QtCore.QRunnable):
         finally:
             self._lock.unlock()
 
+class SQLSingleFunction(QtCore.QRunnable):
+    '''
+    Worker thread
+    '''
+    def __init__(self, lock, func, *args, **kwargs):
+        super(SingleFunction, self).__init__()
+        self._func = func
+        self._args = args
+        self._kwargs = kwargs
+        self._lock = lock
+        self._signals = WorkerSignals()
+
+    @QtCore.pyqtSlot()
+    def run(self):
+        '''
+        Your code goes in this function
+        '''
+        with closing(sql.SQLManager()) as sql:
+            self._lock.lock()
+            try:
+                getattr(sql, self._func)(*self._args, **self._kwargs)
+                self._signals.finished.emit()
+            except:
+                self._signals.finishedWithErrors.emit()
+            finally:
+                self._lock.unlock()
+
 class WorkerSignals(QtCore.QObject):
     finished = QtCore.pyqtSignal()
     finishedWithErrors = QtCore.pyqtSignal()
@@ -1041,95 +1068,6 @@ class WorkerSignals(QtCore.QObject):
     error = QtCore.pyqtSignal(tuple)
     result = QtCore.pyqtSignal(object)
     
-class FileUpdate(QtCore.QRunnable):
-    '''
-    Worker thread
-    '''
-    def __init__(self, writelock):
-        super(FileUpdate, self).__init__()
-##        self._conn=conn
-        self._writelock = writelock
-        self._signals = WorkerSignals()
-
-    @QtCore.pyqtSlot()
-    def run(self):
-        '''
-        Your code goes in this function
-        '''
-        self._sql = sql.SQLManager()
-        user_settings = self._sql.getSettings()
-        allseries = self._sql.getDownloadingSeries()
-        # do i need to update shanalink creds? 
-        ''' what happens in a file update:
-check to see if download is in progress, if not just return/wait
-
-run seriesManager.prepCheckFiles
-run seriesManager icheckFiles (threaded part)
-set downloadinprogress based on seriresmanger.checkfiles
-refresh gui
-release lock
-'''
-        changedFiles=[]
-        removeInvalid=[]
-        if not user_settings:
-            return 
-        if not len(allseries):
-            return 
-        dl_dir = user_settings['Download Directory']
-        # we replace space with _ here, make sure to do this to all the strings you want to match.
-        originalFiles = os.listdir(dl_dir)
-        potentialFiles = [re.sub(r'[ ]',r'_',x) for x in originalFiles]
-        potentialMatches = dict(list(zip(potentialFiles,originalFiles)))
-        for series in list(allseries.values()):
-            for episode in series:
-                pattern,replacement = rss.RSSReader.invalidCharReplacement(user_settings['RSS Feed'])                    
-                workingFile = re.sub(pattern,replacement,episode['file_name'])
-                if workingFile in potentialMatches:
-                    filename = potentialMatches[workingFile]
-                    path=os.path.join(dl_dir,filename)
-                    torrentdata=episode['torrent_data']
-                    percent_downloaded=episode['download_percent']
-                    if not torrentdata:
-                        torrent = torrentprogress.download_torrent(episode['torrent_url'])
-                        if torrent:
-                            torrentdata=torrent
-                    if torrentdata:
-                        try:
-                            percent_downloaded, torrentdata=torrentprogress.percentCompleted(io.BytesIO(torrentdata),path)
-##                            print('wtfdownloaded',percent_downloaded+20)
-                            import random
-                            percent_downloaded=random.randint(1,99)
-                        except torrentprogress.BatchTorrentException as e:
-                            print('bencode failed %r'%e)
-                            if len(torrentdata):
-                                print('episode (%s) was removed.'%episode['display_name'])
-                                removeInvalid.append(episode['torrent_url'])
-                                continue
-                        except Exception as e:
-                            print('bencode failed %r'%e)
-                            print('episode (%s) was removed.'%episode['display_name'])
-                            continue
-                    changedFiles.append((episode['torrent_url'],filename,torrentdata,percent_downloaded,episode['id']))
-        #this is a write but we don't need the lock here as nothing else can influence this
-        for episode in changedFiles:
-            self._sql.setDownloading(episode[0],episode[1],episode[2],episode[3])
-        self._writelock.lock()
-        for episode in removeInvalid:
-            self._sql.removeEpisode(episode)
-        self._writelock.unlock()
-
-##        cursor = self._conn.cursor()
-##        cursor.execute('UPDATE episode_data SET watched= NOT watched')
-##        self._conn.commit()
-##        del cursor
-        time.sleep(3)
-        for ep in changedFiles:
-            self._signals.updateEpisode.emit((episode[4],episode[0]))# if we emit id,torrent that is enough
-##            self._signals.finishedWithChanges.emit() 
-        self._signals.finished.emit()
-        # if len(changedfiles) we can emit a layoutchanged signal
-        # actually its datachanged in this case i believe.
-        # we also need a slot? to reload from sql when this signal is recieved (this is in the treemodel?) 
 class FullUpdate(QtCore.QRunnable):
     '''
     Worker thread
@@ -1146,272 +1084,263 @@ class FullUpdate(QtCore.QRunnable):
         '''
         Your code goes in this function
         '''
-        self.internals()
-##        while program.isrunning:
-##            self.internals()
-##            interruptable_sleep(3600)
-    def internals(self):
-        quick = self._quick
-        self._sql = sql.SQLManager()
-        
-
-        
-        
-        # if user_settings not defined you should probably just end early.
-        # emit finished signal if/when you do
+        with closing(sql.SQLManager()) as self._sql:
+            quick = self._quick
+            # if user_settings not defined you should probably just end early.
+            # emit finished signal if/when you do
 
 
 
-       #phase1prep
+           #phase1prep
 
-        # do some bookkeeping
-        self._writelock = QtCore.QMutexLocker(self._writemutex)
-        # starts locked
-        changes = self._sql.hideOldSeries()
-        if changes:
-            self._signals.dataModified.emit()
-        self._writelock.unlock()
-
-        #load this data when you need it to ensure it is up to date, or wrap it all in one sql transaction
-##        
-##        allseries = self._sql.getSeries()
-
-
-        # some time consuming stuff:
-        # download the anidb title list if needed
-        # hash all files awaiting hashing
-        titleList = None
-        if not quick:
-            titleUpdateTime = self._sql.titleUpdateTime()
-            if titleUpdateTime:
-                try:
-                    titleList = anidb.anidb_title_list()
-                except (urllib.error.URLError,urllib.error.HTTPError) as e:
-                    'banned or site is down'
-                    print('failed to fetch anidb title list. (%r)'%e)
-                if titleList:
-                    self._writelock.relock()
-                    self._sql.cacheTitles(titleList)
-                    self._writelock.unlock()
-                    # updates user_settings
-            
-            toHash = self._sql.getUnhashed()
-            hasherrors=0
-##            print('hashing',len(toHash),'files')
-            for file in toHash:
-                ed2k = None
-                try:
-                    ed2k,filesize=anidb.anidbInterface.ed2k_hash(file)
-                except:
-                    # if hashing fails on one file, we don't want to exclude the others.
-                    hasherrors+=1 # we never do anything with this var though....
-                if ed2k:
-                    self._writelock.relock()
-                    self._sql.updateHash(file,ed2k,filesize)
-                    self._writelock.unlock()
-        #phase1gap
-        print('phase 1 gap')
-
-        # parse your rss feed and add new episodes
-        user_settings = self._sql.getSettings()
-        rssitems = rss.RSSReader().getFiles(user_settings['RSS Feed'])
-        self._writelock.relock()
-        newEntries = []
-        torrentBlacklist = self._sql.getTorrentBlacklist()
-        for item in rssitems:
-            if item[2] not in torrentBlacklist:
-                                                                                            #file name, rsstitle,torrent url 
-                if self._sql.addEpisode(os.path.join(user_settings['Download Directory'],item[1]),item[0],item[2]):
-                    newEntries.append(item)
-        if len(newEntries):
-            self._signals.dataModified.emit()
-        self._writelock.unlock()
-
-        # download new torrent files [must do this after the rssitems part]
-##        torrentDatas = []
-##        removeInvalidTorrents = []
-        if len(newEntries):
-            user_settings = self._sql.getSettings()
-        for entry in newEntries:
-            torrent = torrentprogress.download_torrent(entry[2])
-            if torrent:
-                torrentdata=torrent
-                try:
-                    filename = torrentprogress.file_name(io.BytesIO(torrentdata))
-                except Exception as e:
-                    print('initial bencode failed %r'%e)
-                    print('pre-removing %s.'%entry[1])
-##                    removeInvalidTorrents.append((entry[2],len(torrentdata)))
-                    self._writelock.relock()
-                    self._sql.removeEpisode(entry[2],len(torrentdata)) # if torrentdata is len(0) don't blacklist
-                    self._writelock.unlock()
-                    continue
-                path = os.path.join(user_settings['Download Directory'],filename)
-                self._writelock.relock()
-                self._sql.addTorrentData(path,entry[2],torrentdata,filename)
-                self._writelock.unlock()
-        if len(newEntries):
-            self._signals.dataModified.emit()
-        print('phase 1 done')
-
-        #phase2prep
-        print(self._sql.getToAdd())
-        if not quick:
-            self._writelock.relock()
-            user_settings, toAdd = self._sql.getToAdd()
-            self._writelock.unlock()
-            
-            self.newAids=[]
-            if user_settings and len(toAdd) and user_settings['anidb Username'] and user_settings['anidb Password']:
-                anidbLink = anidb.anidbInterface()
-                try:
-                    if anidbLink.open_session(user_settings['anidb Username'],user_settings['anidb Password']):
-                        for datum in toAdd:
-                            aid=anidbLink.add_file(datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add'])
-                            # these match with: status, filepath, aid, subgroup, epnum, ed2k, do_generic_add
-                            logging.debug('anidb add status:%s, vars used: %s\t%s\t%s\t%s\t%s\t%s'%(aid,datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add']))
-                            
-                            if aid:#if the add succeeded.
-                                self._writelock.relock()
-                                self._sql.removeParses((datum['path'],))
-                                self._writelock.unlock()
-                                if not datum[1] and aid>0: # if an aid did not exist but was returned by add
-##                                    newAids.append((aid,datum[5]))
-                                    self._writelock.relock()
-                                    self._sql.updateAids(((aid,datum['id']),)) # we most likely don't need to update data for this...
-                                    self._writelock.unlock()
-                        anidbLink.close_session()
-                finally:
-                    anidbLink.end_session()
-            self._writelock.relock()
-            self._sql.updateOneUnknownAid() # this takes AGES to run.
+            # do some bookkeeping
+            self._writelock = QtCore.QMutexLocker(self._writemutex)
+            # starts locked
+            changes = self._sql.hideOldSeries()
+            if changes:
+                self._signals.dataModified.emit()
             self._writelock.unlock()
 
+            #load this data when you need it to ensure it is up to date, or wrap it all in one sql transaction
+    ##        
+    ##        allseries = self._sql.getSeries()
 
 
-
-
-        # this is the file update (this is also the part that should run when you pick the context menu option)
-##        changedFiles=[]
-##        removeInvalid=[]
-        user_settings = self._sql.getSettings()
-        allseries = self._sql.getDownloadingSeries()
-        dl_dir = user_settings['Download Directory']
-        # we replace space with _ here, make sure to do this to all the strings you want to match.
-        originalFiles = os.listdir(dl_dir)
-        potentialFiles = [re.sub(r'[ ]',r'_',x) for x in originalFiles]
-        potentialMatches = dict(list(zip(potentialFiles,originalFiles)))
-        for series in list(allseries.values()):
-            for episode in series:
-                pattern,replacement = rss.RSSReader.invalidCharReplacement(user_settings['RSS Feed'])                    
-                workingFile = re.sub(pattern,replacement,episode['file_name'])
-                if workingFile in potentialMatches:
-                    filename = potentialMatches[workingFile]
-                    path=os.path.join(dl_dir,filename)
-                    torrentdata=episode['torrent_data']
-                    percent_downloaded=episode['download_percent']
-                    if not torrentdata:
-                        torrent = torrentprogress.download_torrent(episode['torrent_url'])
-                        if torrent:
-                            torrentdata=torrent
-                    if torrentdata:
-                        try:
-                            percent_downloaded, torrentdata=torrentprogress.percentCompleted(io.BytesIO(torrentdata),path)
-                        except torrentprogress.BatchTorrentException as e:
-                            print('bencode failed %r'%e)
-                            print('episode (%s) was removed.'%episode['display_name'])
-                            self._writelock.relock()
-                            self._sql.removeEpisode(episode['torrent_url'],len(torrentdata))
-                            self._writelock.unlock()
-                            continue
-##                                removeInvalid.append(episode['torrent_url'],len(torrentdata))
-                        except Exception as e:
-                            print('bencode failed %r'%e)
-                            print('episode (%s) was removed.'%episode['display_name'])
-                            self._writelock.relock()
-                            self._sql.removeEpisode(episode['torrent_url'],len(torrentdata))
-                            self._writelock.unlock()
-                            continue
-##                    changedFiles.append((episode['torrent_url'],filename,torrentdata,percent_downloaded,episode['id']))
-                    self._writelock.relock()
-                    self._sql.setDownloading(episode['torrent_url'],filename,torrentdata,percent_downloaded)
-                    self._signals.updateEpisode.emit((episode['id'],episode['torrent_url']))
-                    self._writelock.unlock()
-##        self._writelock.relock()
-##        for episode in changedFiles:
-##            self._sql.setDownloading(episode[0],episode[1],episode[2],episode[3])
-##        for episode in removeInvalid:
-##            self._sql.removeEpisode(episode)
-##        self._writelock.unlock()
-##        for ep in changedFiles:
-##            self._signals.updateEpisode.emit((episode[4],episode[0]))# if we emit id,torrent that is enough
-        print('phase 2 done')
-        #phase 3 now
-        if not quick:
-            wait= time.time()
-            for aid in self._sql.oneDayOldAids():
-                try:
-                    while time.time() - wait < 2: pass
-                    airdate,imgurl = anidb.anidb_series_info(aid)
-                    wait = time.time()
-                    SEASONS = ['Spring','Summer','Fall','Winter']
-                    date = datetime.datetime.strptime(airdate,'%Y-%m-%d')
-                    sixtydays = datetime.timedelta(60)
-                    date-=sixtydays
-                    dayofyear = int(date.strftime('%j'))
-                    dayofseason = datetime.timedelta(dayofyear%91)
-                    date -= dayofseason
-                    date += sixtydays
-                    seasonindex =(dayofyear-(dayofyear%91))//91
-                    seasonname= '%s %s'%(SEASONS[seasonindex],date.strftime('%Y'))
-##                    toGetSeriesInfoAdds.append((aid,airdate,seasonname,imgurl))
-                    self._writelock.relock()
-                    self._sql.updateSeriesInfo(((aid,airdate,seasonname,imgurl),))
-                    self._writelock.unlock()
-                except Exception as e:
-                    print('anidb_series_info failed on %s b/c %r'%(aid,e))
-##                    toGetSeriesInfoFailedAdds.append(aid)
-                    self._writelock.relock()
-                    self._sql.updateSeriesInfoTime((aid,))
-                    self._writelock.unlock()
-                    
-            user_settings = self._sql.getSettings()
-            if os.name == 'nt' and user_settings['Poster Icons']: # only works on windows.
-                newIcons = self._sql.getOutdatedPosters()
-                
-
-                '''hashes the selected files, also downloads poster art if applicable'''
-                for icon in newIcons:
-                    folder_title = r''.join(i for i in icon['title'] if i not in r'\/:*?"<>|.')
-                    dest_folder = os.path.join(user_settings['Save Directory'],folder_title)
-                    if user_settings['Season Sort'] and icon['season']:
-                        year = icon['season'].split()[1]
-                        dest_folder = os.path.join(user_settings['Save Directory'],year,icon['season'],folder_title)
+            # some time consuming stuff:
+            # download the anidb title list if needed
+            # hash all files awaiting hashing
+            titleList = None
+            if not quick:
+                titleUpdateTime = self._sql.titleUpdateTime()
+                if titleUpdateTime:
                     try:
-                        try:
-                            if icon['aid'] and os.path.exists(dest_folder) and (not os.path.exists(os.path.join(dest_folder,'%i.ico'%icon['aid'])) or not icon['nochange']):
-                                makeico.makeIcon(icon['aid'],icon['poster_url'],dest_folder)
-                            self._writelock.relock()
-                            self._sql.updateCoverArts(((icon['aid'],icon['poster_url']),))
-                            self._writelock.unlock()
-    ##                        successfulIcons.append((icon['aid'],icon['poster_url']))
-                        except IOError as e:
-                            if e.errno!=errno.ENOENT:
-                                raise
-                            else:
-                                '''errno 2 is file/directory does not exist.
-                                this simply means you tried to get poster art before any episodes were downloaded.
-                                we will just try to get the art again at a later date'''
-    ##                            self.successfulIcons.append((icon['aid'],None))
-                    except Exception as e:
-                        print('failed to download series image for %s b/c %r'%(icon['title'],e))
-    ##                    self.successfulIcons.append((icon['aid'],None))
-                    finally:
+                        titleList = anidb.anidb_title_list()
+                    except (urllib.error.URLError,urllib.error.HTTPError) as e:
+                        'banned or site is down'
+                        print('failed to fetch anidb title list. (%r)'%e)
+                    if titleList:
                         self._writelock.relock()
-                        self._sql.updateCoverArts(((icon['aid'],None),))
+                        self._sql.cacheTitles(titleList)
                         self._writelock.unlock()
-        print('phase 3 done')
-        self._signals.finished.emit()
+                        # updates user_settings
+                
+                toHash = self._sql.getUnhashed()
+                hasherrors=0
+    ##            print('hashing',len(toHash),'files')
+                for file in toHash:
+                    ed2k = None
+                    try:
+                        ed2k,filesize=anidb.anidbInterface.ed2k_hash(file)
+                    except:
+                        # if hashing fails on one file, we don't want to exclude the others.
+                        hasherrors+=1 # we never do anything with this var though....
+                    if ed2k:
+                        self._writelock.relock()
+                        self._sql.updateHash(file,ed2k,filesize)
+                        self._writelock.unlock()
+            #phase1gap
+            print('phase 1 gap')
+
+            # parse your rss feed and add new episodes
+            user_settings = self._sql.getSettings()
+            rssitems = rss.RSSReader().getFiles(user_settings['RSS Feed'])
+            self._writelock.relock()
+            newEntries = []
+            torrentBlacklist = self._sql.getTorrentBlacklist()
+            for item in rssitems:
+                if item[2] not in torrentBlacklist:
+                                                                                                #file name, rsstitle,torrent url 
+                    if self._sql.addEpisode(os.path.join(user_settings['Download Directory'],item[1]),item[0],item[2]):
+                        newEntries.append(item)
+            if len(newEntries):
+                self._signals.dataModified.emit()
+            self._writelock.unlock()
+
+            # download new torrent files [must do this after the rssitems part]
+    ##        torrentDatas = []
+    ##        removeInvalidTorrents = []
+            if len(newEntries):
+                user_settings = self._sql.getSettings()
+            for entry in newEntries:
+                torrent = torrentprogress.download_torrent(entry[2])
+                if torrent:
+                    torrentdata=torrent
+                    try:
+                        filename = torrentprogress.file_name(io.BytesIO(torrentdata))
+                    except Exception as e:
+                        print('initial bencode failed %r'%e)
+                        print('pre-removing %s.'%entry[1])
+    ##                    removeInvalidTorrents.append((entry[2],len(torrentdata)))
+                        self._writelock.relock()
+                        self._sql.removeEpisode(entry[2],len(torrentdata)) # if torrentdata is len(0) don't blacklist
+                        self._writelock.unlock()
+                        continue
+                    path = os.path.join(user_settings['Download Directory'],filename)
+                    self._writelock.relock()
+                    self._sql.addTorrentData(path,entry[2],torrentdata,filename)
+                    self._writelock.unlock()
+            if len(newEntries):
+                self._signals.dataModified.emit()
+            print('phase 1 done')
+
+            #phase2prep
+            print(self._sql.getToAdd())
+            if not quick:
+                self._writelock.relock()
+                user_settings, toAdd = self._sql.getToAdd()
+                self._writelock.unlock()
+                
+                self.newAids=[]
+                if user_settings and len(toAdd) and user_settings['anidb Username'] and user_settings['anidb Password']:
+                    anidbLink = anidb.anidbInterface()
+                    try:
+                        if anidbLink.open_session(user_settings['anidb Username'],user_settings['anidb Password']):
+                            for datum in toAdd:
+                                aid=anidbLink.add_file(datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add'])
+                                # these match with: status, filepath, aid, subgroup, epnum, ed2k, do_generic_add
+                                logging.debug('anidb add status:%s, vars used: %s\t%s\t%s\t%s\t%s\t%s'%(aid,datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add']))
+                                
+                                if aid:#if the add succeeded.
+                                    self._writelock.relock()
+                                    self._sql.removeParses((datum['path'],))
+                                    self._writelock.unlock()
+                                    if not datum[1] and aid>0: # if an aid did not exist but was returned by add
+    ##                                    newAids.append((aid,datum[5]))
+                                        self._writelock.relock()
+                                        self._sql.updateAids(((aid,datum['id']),)) # we most likely don't need to update data for this...
+                                        self._writelock.unlock()
+                            anidbLink.close_session()
+                    finally:
+                        anidbLink.end_session()
+                self._writelock.relock()
+                self._sql.updateOneUnknownAid() # this takes AGES to run.
+                self._writelock.unlock()
+
+
+
+
+
+            # this is the file update (this is also the part that should run when you pick the context menu option)
+    ##        changedFiles=[]
+    ##        removeInvalid=[]
+            user_settings = self._sql.getSettings()
+            allseries = self._sql.getDownloadingSeries()
+            dl_dir = user_settings['Download Directory']
+            # we replace space with _ here, make sure to do this to all the strings you want to match.
+            originalFiles = os.listdir(dl_dir)
+            potentialFiles = [re.sub(r'[ ]',r'_',x) for x in originalFiles]
+            potentialMatches = dict(list(zip(potentialFiles,originalFiles)))
+            for series in list(allseries.values()):
+                for episode in series:
+                    pattern,replacement = rss.RSSReader.invalidCharReplacement(user_settings['RSS Feed'])                    
+                    workingFile = re.sub(pattern,replacement,episode['file_name'])
+                    if workingFile in potentialMatches:
+                        filename = potentialMatches[workingFile]
+                        path=os.path.join(dl_dir,filename)
+                        torrentdata=episode['torrent_data']
+                        percent_downloaded=episode['download_percent']
+                        if not torrentdata:
+                            torrent = torrentprogress.download_torrent(episode['torrent_url'])
+                            if torrent:
+                                torrentdata=torrent
+                        if torrentdata:
+                            try:
+                                percent_downloaded, torrentdata=torrentprogress.percentCompleted(io.BytesIO(torrentdata),path)
+                            except torrentprogress.BatchTorrentException as e:
+                                print('bencode failed %r'%e)
+                                print('episode (%s) was removed.'%episode['display_name'])
+                                self._writelock.relock()
+                                self._sql.removeEpisode(episode['torrent_url'],len(torrentdata))
+                                self._writelock.unlock()
+                                continue
+    ##                                removeInvalid.append(episode['torrent_url'],len(torrentdata))
+                            except Exception as e:
+                                print('bencode failed %r'%e)
+                                print('episode (%s) was removed.'%episode['display_name'])
+                                self._writelock.relock()
+                                self._sql.removeEpisode(episode['torrent_url'],len(torrentdata))
+                                self._writelock.unlock()
+                                continue
+    ##                    changedFiles.append((episode['torrent_url'],filename,torrentdata,percent_downloaded,episode['id']))
+                        self._writelock.relock()
+                        self._sql.setDownloading(episode['torrent_url'],filename,torrentdata,percent_downloaded)
+                        self._signals.updateEpisode.emit((episode['id'],episode['torrent_url']))
+                        self._writelock.unlock()
+    ##        self._writelock.relock()
+    ##        for episode in changedFiles:
+    ##            self._sql.setDownloading(episode[0],episode[1],episode[2],episode[3])
+    ##        for episode in removeInvalid:
+    ##            self._sql.removeEpisode(episode)
+    ##        self._writelock.unlock()
+    ##        for ep in changedFiles:
+    ##            self._signals.updateEpisode.emit((episode[4],episode[0]))# if we emit id,torrent that is enough
+            print('phase 2 done')
+            #phase 3 now
+            if not quick:
+                wait= time.time()
+                for aid in self._sql.oneDayOldAids():
+                    try:
+                        while time.time() - wait < 2: pass
+                        airdate,imgurl = anidb.anidb_series_info(aid)
+                        wait = time.time()
+                        SEASONS = ['Spring','Summer','Fall','Winter']
+                        date = datetime.datetime.strptime(airdate,'%Y-%m-%d')
+                        sixtydays = datetime.timedelta(60)
+                        date-=sixtydays
+                        dayofyear = int(date.strftime('%j'))
+                        dayofseason = datetime.timedelta(dayofyear%91)
+                        date -= dayofseason
+                        date += sixtydays
+                        seasonindex =(dayofyear-(dayofyear%91))//91
+                        seasonname= '%s %s'%(SEASONS[seasonindex],date.strftime('%Y'))
+    ##                    toGetSeriesInfoAdds.append((aid,airdate,seasonname,imgurl))
+                        self._writelock.relock()
+                        self._sql.updateSeriesInfo(((aid,airdate,seasonname,imgurl),))
+                        self._writelock.unlock()
+                    except Exception as e:
+                        print('anidb_series_info failed on %s b/c %r'%(aid,e))
+    ##                    toGetSeriesInfoFailedAdds.append(aid)
+                        self._writelock.relock()
+                        self._sql.updateSeriesInfoTime((aid,))
+                        self._writelock.unlock()
+                        
+                user_settings = self._sql.getSettings()
+                if os.name == 'nt' and user_settings['Poster Icons']: # only works on windows.
+                    newIcons = self._sql.getOutdatedPosters()
+                    
+
+                    '''hashes the selected files, also downloads poster art if applicable'''
+                    for icon in newIcons:
+                        folder_title = r''.join(i for i in icon['title'] if i not in r'\/:*?"<>|.')
+                        dest_folder = os.path.join(user_settings['Save Directory'],folder_title)
+                        if user_settings['Season Sort'] and icon['season']:
+                            year = icon['season'].split()[1]
+                            dest_folder = os.path.join(user_settings['Save Directory'],year,icon['season'],folder_title)
+                        try:
+                            try:
+                                if icon['aid'] and os.path.exists(dest_folder) and (not os.path.exists(os.path.join(dest_folder,'%i.ico'%icon['aid'])) or not icon['nochange']):
+                                    makeico.makeIcon(icon['aid'],icon['poster_url'],dest_folder)
+                                self._writelock.relock()
+                                self._sql.updateCoverArts(((icon['aid'],icon['poster_url']),))
+                                self._writelock.unlock()
+        ##                        successfulIcons.append((icon['aid'],icon['poster_url']))
+                            except IOError as e:
+                                if e.errno!=errno.ENOENT:
+                                    raise
+                                else:
+                                    '''errno 2 is file/directory does not exist.
+                                    this simply means you tried to get poster art before any episodes were downloaded.
+                                    we will just try to get the art again at a later date'''
+        ##                            self.successfulIcons.append((icon['aid'],None))
+                        except Exception as e:
+                            print('failed to download series image for %s b/c %r'%(icon['title'],e))
+        ##                    self.successfulIcons.append((icon['aid'],None))
+                        finally:
+                            self._writelock.relock()
+                            self._sql.updateCoverArts(((icon['aid'],None),))
+                            self._writelock.unlock()
+            print('phase 3 done')
+            self._signals.finished.emit()
 ##        # do i need to update shanalink creds? 
         ''' there is a LOT that happens here. you can prob separate it out (q) means omit this for quick update
 series.phase1prep
@@ -1877,5 +1806,8 @@ if __name__ == '__main__':
 ##    main.move(QtCore.QPoint(main.pos().x(),0))
     main.show()
     app.setQuitOnLastWindowClosed(False)
+    s = sql.SQLManager(createtables = True)
+    s.close()
+    
     sys.exit(app.exec_())
 ##        conn.close()

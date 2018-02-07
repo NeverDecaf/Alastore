@@ -29,11 +29,7 @@ LAST_UPDATE_TIME=2 * ONE_WEEK + ONE_DAY#exception
 AID_UPDATE_TIME=ONE_DAY#exception
 '''time before bad torrent entries are removed from blacklist'''
 BLACKLIST_UPDATE_TIME=ONE_DAY#exception
-def dict_factory(cursor, row):
-    d = {}
-    for idx, col in enumerate(cursor.description):
-        d[col[0]] = row[idx]
-    return d
+
 class SQLManager:
     conn=None
     cursor=None
@@ -42,20 +38,15 @@ class SQLManager:
     SHANA_TITLE = re.compile('.*(?= - \d)')
     SUBGROUP = re.compile('(?<=\[)[^\]]*(?=])')#make sure you get the last one [-1]
     COLUMN_NAMES = ['RSS Feed','Download Directory','Save Directory','anidb Username','anidb Password','Season Sort','Poster Icons','Auto Hide Old','Shana Project Username','Shana Project Password']
-##    COLUMN_NAMES = ['RSS Feed','Download Directory','Save Directory','anidb Username','anidb Password','Season Sort','Poster Icons','Auto Hide Old','Shana Project Username','Shana Project Password']
+
     # init. supply the name of the db.
-    def __init__(self, db='Alastore.db'):
+    def __init__(self, db='Alastore.db', createtables = False):
         self.db=db
         self.conn=sqlite3.connect(self.db)#,check_same_thread=False)
-##        self.conn.row_factory = dict_factory#sqlite3.Row
         self.conn.row_factory = sqlite3.Row
         self.cursor = self.conn.cursor()
-        self._createTables()
-    
-##    def __init__(self, conn):
-##        self.conn=conn
-##        self.cursor=conn.cursor()
-##        self._createTables()
+        if createtables:
+            self._createTables()
         
     # Open a connection to the db. Will be used by this SQLManager until it is closed.
     def connect(self):
@@ -104,22 +95,6 @@ class SQLManager:
         self.cursor.execute('''INSERT OR IGNORE INTO user_settings (id) VALUES (0)''')
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS bad_torrents
                  (url text PRIMARY KEY, last_update integer DEFAULT (strftime('%s', 'now')))''')
-
-
-        # this has to be done as a backwards compatibility measure, remove in the next minor version.
-        try:
-            self.cursor.execute('''ALTER TABLE user_settings ADD COLUMN
-                     shanaproject_username text DEFAULT '' ''')
-        except sqlite3.OperationalError as msg:
-            if str(msg)!=r'duplicate column name: shanaproject_username':
-                raise
-
-        try:
-            self.cursor.execute('''ALTER TABLE user_settings ADD COLUMN
-                     shanaproject_password text DEFAULT '' ''')
-        except sqlite3.OperationalError as msg:
-            if str(msg)!=r'duplicate column name: shanaproject_password':
-                raise
         self.conn.commit()
 
     # saves the supplied user settings into the db.
