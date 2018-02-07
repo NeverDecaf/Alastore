@@ -1,7 +1,5 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 import sys
-##import icons_rc
-##import random
 import sqlite3
 import time
 import rss
@@ -15,12 +13,10 @@ import datetime
 import makeico
 import sql
 import shutil
-import sys,subprocess, os # for watchfile
+import subprocess
 import logging
 from contextlib import closing
-
 from shana_interface import ShanaLink
-##WRITELOCK_TIMEOUT = 60
 FULLUPDATE_TIME = 1000 * 60 * 10 #once every 10 m
 INITIALUPDATE_GRACEPERIOD = 1000 * 60 * 2 # 2m (this is time before the first (only) quick update)
 COLORSCHEME = {'background': QtGui.QColor(255,255,255),#
@@ -96,6 +92,9 @@ class Node(object):
         self._children.insert(position, child)
         child._parent = self
         return True
+
+    def getChildren(self):
+        return self._children
 
     def removeChild(self, position):
         if position < 0 or position > len(self._children):
@@ -198,13 +197,24 @@ class TreeModel(QtCore.QAbstractItemModel):
 
     def _updateData(self):
         self.data = self._sqlManager.getSeries()
-        for key in sorted(self.data.keys()):
-            if self.data[key] and not self.data[key][0]['hidden']:
-                head = HeaderNode(self.data[key][-1], key, self._rootNode)
-                for ep in reversed(self.data[key]):
+        headers = self._rootNode.getChildren()
+        for i in range(len(headers)):
+            if headers[i].series not in self.data or not self.data[series]:
+                self.removeRows(i,1,QtCore.QModelIndex())
+        for series in sorted(self.data.keys()):
+            if self.data[series]:
+                # remove all contents of old header
+                head = self._rootNode.getChildById(series)
+                if not head:
+                    head = HeaderNode(self.data[series][-1], series, self._rootNode)
+                else:
+                    # remove all contents of old header
+                    headIndex = self.createIndex(head.row(), 0, head)
+                    self.removeRows(0,head.childCount(),headIndex)
+                for ep in reversed(self.data[series]):
                     n=Node(ep,head)
                 head.update()
-
+        
     def playandsort(self, index):
         if index.internalPointer().downloaded()>0:
             user_settings = self._sqlManager.getSettings()
@@ -423,11 +433,9 @@ You should only use this option if a file fails to download or is moved/deleted 
     def sqlDataChanged(self):
         # if something was changed by an external source (thread)
         # just reload all data and emit layoutchanged      
-        self.removeRows(0,self.rowCount(QtCore.QModelIndex()))
         self._updateData()
         self.sort()
         self.dataChanged.emit(QtCore.QModelIndex(),QtCore.QModelIndex(),[]) # keep it simple and just refresh everything.
-##        self.layoutChanged.emit()# using this will RESET the view entirely (collapse everything)
 
     def updateEpisode(self, data):
         series_id, torrent_url = data
@@ -1393,7 +1401,7 @@ if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
 ##    app.setStyle("plastique")
     
-    rootNode   = Node({'display_name': 'Gamers! - 1 [FreakCrSuBuS]', 'subgroup': 'FreakCrSuBuS', 'hidden': 1, 'season': 'Summer 2017', 'title': 'Gamers!', 'torrent_data': None, 'download_percent': 0, 'id': 413, 'path': 'E:\\STORE\\Anime\\2017\\Summer 2017\\Gamers!\\[FreakCrSuBuS] Gamers! - 01 [720].mkv', 'episode': 1, 'torrent_url': 'https://www.shanaproject.com/download/153488/', 'downloaded': 0, 'file_name': '[FreakCrSuBuS] Gamers! - 01 [720].mkv', 'watched': 1})
+    rootNode   = Node({})
     #fill this root node with more sensible nonsense
 
     threadpool = QtCore.QThreadPool()
