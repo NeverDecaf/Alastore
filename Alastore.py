@@ -23,16 +23,25 @@ from shana_interface import ShanaLink
 ##WRITELOCK_TIMEOUT = 60
 FULLUPDATE_TIME = 1000 * 60 * 10 #once every 10 m
 INITIALUPDATE_GRACEPERIOD = 1000 * 60 * 2 # 2m (this is time before the first (only) quick update)
+COLORSCHEME = {'background': QtGui.QColor(255,255,255),#
+               'watchedh': QtGui.QColor(215,215,215),#
+               'downloadedh': QtGui.QColor(255,255,255),#
+               'notdownloadedh': QtGui.QColor(225,225,225),#
+               'downloadprogressh':QtGui.QColor(255,255,255),
+               'forcewatchedh':QtGui.QColor(225,225,225),
+               'watched': QtGui.QColor(255,255,255),#
+               'downloaded': QtGui.QColor(255,255,255),#
+               'notdownloaded': QtGui.QColor(220,220,220),#
+               'forcewatched':QtGui.QColor(220,220,220),
+               'watchedfg': QtGui.QColor(125,25,25),
+               'downloadedfg': QtGui.QColor(25,125,25),
+               'notdownloadedfg': QtGui.QColor(30,120,120),
+               'forcewatchedfg':QtGui.QColor(180,55,55),
+               }
 
 class Node(object):
-##    class objectview(object):
-##        def __init__(self, d):
-##            self.__dict__ = d
     def __init__(self, data, parent=None):
         self._data = data
-##        self._name = name
-##        print(dir(self._data))
-##        print(self._data.display_name)
         self._children = []
         self._parent = parent
         
@@ -62,6 +71,8 @@ class Node(object):
         return self._data['path']
     def file_name(self):
         return self._data['file_name']
+    def name(self):
+        return self._data['display_name']
     
     def getChildById(self,series_id):
         for i in self._children:
@@ -71,9 +82,6 @@ class Node(object):
         for j in self._children:
             if j.torrent_url() == torrent_url:
                 return j
-    def name(self):
-        return self._data['display_name']
-
 
     def typeInfo(self):
         return "NODE"
@@ -82,7 +90,6 @@ class Node(object):
         self._children.append(child)
 
     def insertChild(self, position, child):
-        
         if position < 0 or position > len(self._children):
             return False
         
@@ -91,15 +98,12 @@ class Node(object):
         return True
 
     def removeChild(self, position):
-        
         if position < 0 or position > len(self._children):
             return False
         
         child = self._children.pop(position)
         child._parent = None
-
         return True
-
 
     def child(self, row):
         return self._children[row]
@@ -118,62 +122,32 @@ class Node(object):
         self._children.sort(key=lambda n: (n.watched(),n.downloaded(),n.name().lower()))
         
     def log(self, tabLevel=-1):
-
         output     = ""
         tabLevel += 1
         
         for i in range(tabLevel):
             output += "\t"
         
-        output += "|------" + self._data.display_name + "\n"
+        output += "|------" + self.name() + "\n"
         
         for child in self._children:
             output += child.log(tabLevel)
         
         tabLevel -= 1
         output += "\n"
-        
         return output
 
     def __repr__(self):
         return self.log()
 
-
-
-class TransformNode(Node):
-    
-    def __init__(self, name, parent=None):
-        super(TransformNode, self).__init__(name, parent)
-        
-    def typeInfo(self):
-        return "TRANSFORM"
-
-class CameraNode(Node):
-    
-    def __init__(self, name, parent=None):
-        super(CameraNode, self).__init__(name, parent)
-        
-    def typeInfo(self):
-        return "CAMERA"
-
-class LightNode(Node):
-    
-    def __init__(self, name, parent=None):
-        super(LightNode, self).__init__(name, parent)
-        
-    def typeInfo(self):
-        return "LIGHT"
-
 class HeaderNode(Node):
     def __init__(self, data, series, parent=None):
         super(HeaderNode, self).__init__(data, parent)
         self._series = series
-##        self._current = self._getlatest()
         self.update()
-        # series is also the dict key
         
     def typeInfo(self):
-        return "LIGHT"
+        return "HEADERNODE"
 
     def series(self):
         return self._series
@@ -211,12 +185,7 @@ class HeaderNode(Node):
         super(HeaderNode, self).setwatched(i)
         self.update()
     
-    #how to track, just keep index of the child?
-    # or just dupe data? < - this is the cleanest even if its the riskiest.
-    # or just rely on sql?
-    
 class TreeModel(QtCore.QAbstractItemModel):
-    
     """INPUTS: Node, QObject"""
     def __init__(self, root, lock, threadpool, parent=None):
         super(TreeModel, self).__init__(parent)
@@ -226,12 +195,11 @@ class TreeModel(QtCore.QAbstractItemModel):
         self._writelock = lock
         self._threadpool = threadpool
         self._shanalink = ShanaLink()
-        
 
     def _updateData(self):
         self.data = self._sqlManager.getSeries()
         for key in sorted(self.data.keys()):
-            if self.data[key] and not self.data[key][0]['hidden']: #whats up with that, commented cus i dont understand
+            if self.data[key] and not self.data[key][0]['hidden']:
                 head = HeaderNode(self.data[key][-1], key, self._rootNode)
                 for ep in reversed(self.data[key]):
                     n=Node(ep,head)
@@ -251,7 +219,6 @@ class TreeModel(QtCore.QAbstractItemModel):
                 else:
                     t = SingleFunction(lambda:playmove(user_settings,index),self._writelock)
                     t._signals.finished.connect(self.sqlDataChanged)
-##                    t._signals.finishedWithErrors.connect(lambda: QtWidgets.QMessageBox.information(parent,self.tr('Drop Failed'),self.tr('Could not connect to Shana Project to drop {}, check your login credentials and internet connection.').format(index.internalPointer().title())))
                     self._threadpool.start(t)
                 def playmove(user_settings, index):
                     with closing(sql.SQLManager()) as sqlmanager:
@@ -302,8 +269,6 @@ class TreeModel(QtCore.QAbstractItemModel):
                             ed2k,filesize=anidb.anidbInterface.ed2k_hash(dest_file)
                         except Exception as e:
                             print('Error hashing file (initial hash) %s; %r'%(dest_file,e))
-                        # cant reach this state now if path!='watched'
-    ##                    print('sql move placeholder')
                         sqlmanager.watchMoveQueue(index.internalPointer().path(),dest_file,ed2k,filesize)
                         try:
                             moveAllToFolder(dest_file)
@@ -327,14 +292,12 @@ class TreeModel(QtCore.QAbstractItemModel):
         func(path)
         
     def getContextOptions(self,isheader):
-##        if isheader:
         opt = []
         opt.append((self.tr("&Hide Series"),self.hideSeries))
         opt.append((self.tr("&Mark All Watched"),self.markSeriesWatched))
 ##        if not isheader:
         opt.append((self.tr("&Mark Episode Watched"),self.markEpisodeWatched))
         opt.append((self.tr("&Drop Series"),self.dropSeries))
-
         return opt
         
     def hideSeries(self,index,parent):
@@ -409,7 +372,6 @@ You should only use this option if a file fails to download or is moved/deleted 
                     shanalink.update_creds(user_settings['Shana Project Username'],user_settings['Shana Project Password'])
                     success = 0
                     try:
-    ##                    raise(Exception())
                         success = shanalink.delete_follow(title)
                     except Exception as e:
                         print('Error dropping series: %r'%e)
@@ -425,11 +387,6 @@ You should only use this option if a file fails to download or is moved/deleted 
                                 TreeModel.cleanFolder(directory)
                             _sql.dropSeries(id)
                     
-##                    self.sqlDataChanged() # emit this instead
-##                    emit finished
-##                    emit finishedwitherrors
-##                    QtWidgets.QMessageBox.information(parent,self.tr('Drop Failed'),self.tr('Could not connect to Shana Project to drop {}, check your login credentials and internet connection.').format(title))
-##            self._widget.dropSeries(delete)
     def showAgainDialog(self,parent):
         if not self._sqlManager.getShowAgain():
             d=StillRunningDialog(parent)
@@ -467,8 +424,6 @@ You should only use this option if a file fails to download or is moved/deleted 
         # if something was changed by an external source (thread)
         # just reload all data and emit layoutchanged      
         self.removeRows(0,self.rowCount(QtCore.QModelIndex()))
-##        for i in range(self._rootNode.childCount()):
-##            self._rootNode.removeChild(0)
         self._updateData()
         self.sort()
         self.dataChanged.emit(QtCore.QModelIndex(),QtCore.QModelIndex(),[]) # keep it simple and just refresh everything.
@@ -532,45 +487,7 @@ You should only use this option if a file fails to download or is moved/deleted 
             return -1
             
     def dblClickEvent(self, index):
-        #only handling the header case for now.
-        # mark as watched
-        #this hack is about 100x easier than the below "solution"
-        self.playandsort(index)
-
-        
-##        self._watchfile(index.internalPointer()._data.path)
-####        self.layoutAboutToBeChanged.emit()
-##        node = index.internalPointer()
-##        node.setwatched(1)
-####        self.layoutChanged.emit()
-##
-##        if not index.parent().isValid():
-##            ' you clicked a header '
-##            childindex = (self.index(node.currentIndex(),0,index))
-##
-##            self.dataChanged.emit(index,index,[])
-##            self.dataChanged.emit(childindex,childindex,[])
-##        else:
-##            index.parent().internalPointer().update()
-##            self.dataChanged.emit(index,index,[])
-##            self.dataChanged.emit(index.parent(),index.parent(),[])
-            
-        
-        #obv you need to actually watch the file and update the db
-        
-##        if not index.parent().isValid(): # clicking a header
-##            print('dbl click @',index.internalPointer().name(),index.internalPointer()._data.path)
-##
-##            parent = index.internalPointer()
-##            childindex = (self.index(parent._children.index(parent._current),0,index))
-##            
-##            index.internalPointer().setwatched(1)
-##            index.internalPointer().update()
-##            self.dataChanged.emit(index,index,[])
-##            self.layoutChanged.emit()
-##            print('chil',childindex.internalPointer())
-##            self.dataChanged.emit(childindex,childindex,[])
-        
+        self.playandsort(index)        
     
     """INPUTS: QModelIndex, int"""
     """OUTPUT: QVariant, strings are cast to QString which is a QVariant"""
@@ -693,44 +610,18 @@ You should only use this option if a file fails to download or is moved/deleted 
         self._rootNode.sort()
         pass
         
-
-    
-COLORSCHEME = {'background': QtGui.QColor(255,255,255),#
-               'watchedh': QtGui.QColor(215,215,215),#
-               'downloadedh': QtGui.QColor(255,255,255),#
-               'notdownloadedh': QtGui.QColor(225,225,225),#
-               'downloadprogressh':QtGui.QColor(255,255,255),
-               'forcewatchedh':QtGui.QColor(225,225,225),
-               'watched': QtGui.QColor(255,255,255),#
-               'downloaded': QtGui.QColor(255,255,255),#
-               'notdownloaded': QtGui.QColor(220,220,220),#
-               'forcewatched':QtGui.QColor(220,220,220),
-               'watchedfg': QtGui.QColor(125,25,25),
-               'downloadedfg': QtGui.QColor(25,125,25),
-               'notdownloadedfg': QtGui.QColor(30,120,120),
-               'forcewatchedfg':QtGui.QColor(180,55,55),
-               }
 #-------------------------------------------------------------------------------
 class TreeView(QtWidgets.QTreeView):
-##    #---------------------------------------------------------------------------
+#---------------------------------------------------------------------------
     def __init__(self, parent=None):
         super(TreeView, self).__init__(parent)
         self.setContextMenuPolicy( QtCore.Qt.CustomContextMenu )
         self.customContextMenuRequested.connect( self.openMenu )
         
     def openMenu(self, position):
-    
         index = self.selectedIndexes()[0]
-##        if len(indexes) > 0:
-##        
-##            level = 0
-##            index = indexes[0]
-##            while index.parent().isValid():
-##                index = index.parent()
-##                level += 1
         menu = QtWidgets.QMenu()
         pairs = self.model().getContextOptions(not index.parent().isValid())
-##        acts = []
         # I don't know if this is my fault or an actual bug but you cannot create these dynamically.
         action = menu.addAction(pairs[0][0])
         action.triggered.connect(lambda: pairs[0][1](index,self))
@@ -741,81 +632,26 @@ class TreeView(QtWidgets.QTreeView):
         if len(pairs)>3:
             action = menu.addAction(pairs[3][0])
             action.triggered.connect(lambda: pairs[3][1](index,self))
-            
-##        for text,callback in pairs:
-##            print(text,callback)
-####            action = QtWidgets.QAction(text, self)
-##            action = menu.addAction(text)
-####            acts.append(action)
-##            print(action)
-####            action.triggered[index,self].connect(callback)
-####            action.triggered.connect(lambda: callback(index, self))
-####            menu.connect(action,QtCore.SIGNAL('triggered()'),lambda: print(text))
-##            action.triggered.connect(lambda: print(text))
-####            menu.addAction(acts[-1])
-##        action = menu.addAction('fuck you')
-##        action.triggered.connect(lambda: self.model().hideSeries(index,self))
-##        print(menu)
-        
-##        if 1 or level == 0:
-##            menu.addAction(self.tr("Edit person"))
-##        elif level == 1:
-##            menu.addAction(self.tr("Edit object/container"))
-##        elif level == 2:
-##            menu.addAction(self.tr("Edit object"))
-        
+
         menu.exec_(self.viewport().mapToGlobal(position))
-##    def showMenu(self,pointclicked):
-##        print(obj)
-##                        if ( QRect( 0, 0, self.width(), self.itemHeight ).contains( self.mapFromGlobal( QCursor.pos() ) ) ):
-##                        self._accordianWidget.emitItemMenuRequested( self )
-##
-##
-##
-##              def emitItemMenuRequested( self, item ):
-##                if ( not self.signalsBlocked() ):
-##                        self.itemMenuRequested.emit(item)
-##    pass
-####    def drawRow(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const:
-##    def drawRow(self,paint,option, index):
-##    def expand(self, index):
-##        self.updateGeometries()
-##        self.layoutChanged()
-##        return super(TreeView,self).expand(self,index)
+        
     def drawBranches(self, painter, rect, index):
+        # don't draw the dropdown decorations.
         pass
-##    def indentation(self):
-##        return 200
-##        painter.save()
-##        super(TreeView,self).drawBranches(self, painter, rect, index)
-##        painter.restore()
-##    def sizeHint(self):
-####        print(rowCount())
-##        return QtCore.QSize(500,500)
-    pass
+    
 class ItemDelegate(QtWidgets.QStyledItemDelegate):
     listPadding = (0,2)#padding that will go around the sides of the list. you only get horizontal and vertical
     textPadding = (6,4)#inner padding basically. between the sides of the box and the text inside. ( this is left and right padding where the above is horiz and verti)
     textVertPadding = 7 # total vertical space (top and bot combined)
-    itemHeight = 20# these 2 will be reassigned later.
-    collapseControlWidth = itemHeight # this is the +/- box on the left
-##    def __init__(self, model, parent=None):
-##        super().__init__(parent)
-##        self.__treemodel = model
-        
+    
     def paint(self,painter,option,index):
-        
         from PyQt5.QtCore       import Qt, QRect
 
 
         from PyQt5.QtGui        import (QPainter, QPainterPath,
                                                 QPalette, QPixmap, QPen)
-##        painter = QPainter()
-##        option = initStyleOption(option,index)#QtGui.QStyleOptionViewItemV4
         painter.save()
-##        painter.begin( self )
         painter.setRenderHint( painter.Antialiasing )
-##        print(dir(option))
         x = option.rect.x()
         x= 1
         dw = option.decorationSize.width()
@@ -823,38 +659,15 @@ class ItemDelegate(QtWidgets.QStyledItemDelegate):
         y = option.rect.y() + self.listPadding[1]//2
         w = option.rect.width()+option.rect.x()-3
         h = option.rect.height() - self.listPadding[1]
-##        rowcount = self.__treemodel.rowCount(index.parent())
         if index.parent().isValid():
             rowcount = index.parent().internalPointer().childCount()
         else:
             rowcount = 0 #doesn't matter
-##        print(option.rect.width()+option.rect.x()+dw)
-##        print(dir(index))
-##        print(self.__treeview.rowCount(index.parent()))
-##        if index.parent().isValid():
-##            print('valid')
-##            print(index.data())
-##            print(index.internalPointer())
-####            print(index.parent().internalPointer())
-##            print(self.__treeview.rowCount(index.parent()))
-##            print('k')
-##            print(self.__treeview.rowCount(index.parent().row()))
-##            print(self.__treeview.indexRowSizeHint(index.parent().row()),index.row())
-##        print(option.decorationPosition)
-##        print(dir(option))
-##        print(dir(option.decorationAlignment))
-##        print(option.displayAlignment)
         pen = QPen( option.palette.color( QPalette.Light ) )
-##        print(pen)
         painter.setRenderHint( painter.Antialiasing, False )
-##        print(option.rect)
         pen.setColor( option.palette.color( QPalette.Shadow ) )
         painter.setPen( pen )
-##        print('pen done')
-        # this is the border for an expanded element. we only draw it if this series is expanded. (to avoid thick lines from overlap)
-##        if not self.isCollapsed():
-##            # draw the borders
-##            painter.drawRect( QRect( x, y, w, h ) )
+
         if index.internalPointer().downloaded():
             if index.internalPointer().watched():
                 fg = COLORSCHEME['watchedfg']
@@ -877,36 +690,15 @@ class ItemDelegate(QtWidgets.QStyledItemDelegate):
                 bg = COLORSCHEME['notdownloaded']
                 if not index.parent().isValid():
                     bg = COLORSCHEME['notdownloadedh']
-##        if index.internalPointer().watched():
-##            bg = COLORSCHEME['watched']
-##        elif index.internalPointer().downloaded():
-##            painter.setBrush( COLORSCHEME['downloadedh'] )
-##        else:
-##            painter.setBrush( COLORSCHEME['notdownloadedh'] )
-            
-##        if self.new:
-##            painter.setBrush( COLORSCHEME['downloadedh'] )
-##        elif self.downloading:
-##            painter.setBrush( COLORSCHEME['notdownloadedh'] )
-##        else:
-##            painter.setBrush( COLORSCHEME['watchedh'] )
-        
+
         if not index.parent().isValid():
             painter.fillRect( x , y , w , h, bg )
             if not index.internalPointer().downloaded() and not index.internalPointer().watched():
-##                painter.setBrush( COLORSCHEME['notdownloadedh'] )
-##                painter.fillRect( x , y , w , h, COLORSCHEME['notdownloadedh'] )
-##                painter.setBrush( COLORSCHEME['downloadprogressh'] )
-##                painter.fillRect( x , option.rect.y() , max(0,int(index.internalPointer().downloadProgress()*(w/100.))-1) , option.rect.height(), COLORSCHEME['downloadprogressh'] )
                 painter.fillRect( x , y , max(0,int(index.internalPointer().downloadProgress()*(w/100.))) , h, COLORSCHEME['downloadprogressh'] )
-            painter.drawRect( x , y , w , h)
-##            if not index.internalPointer().downloaded() and not index.internalPointer().watched():
-                
+            painter.drawRect( x , y , w , h)     
         else:
             painter.fillRect( x , option.rect.y() , w , option.rect.height(), bg )
             if not index.internalPointer().downloaded() and not index.internalPointer().watched():
-##                painter.fillRect( x , option.rect.y() , w , option.rect.height(), COLORSCHEME['notdownloadedh'] )
-##                painter.setBrush( COLORSCHEME['downloadprogressh'] )
                 painter.fillRect( x , option.rect.y() , max(0,int(index.internalPointer().downloadProgress()*(w/100.))) , option.rect.height(), COLORSCHEME['downloadprogressh'] )
             ypad = 0
             if index.row() == rowcount-1:
@@ -915,17 +707,6 @@ class ItemDelegate(QtWidgets.QStyledItemDelegate):
             painter.drawRect( x , option.rect.y() , 0 , option.rect.height()+ypad)
             painter.drawRect( w+1, option.rect.y() , 0 , option.rect.height()+ypad)
             
-##            print(w)
-##            painter.drawLine( x,y,x,self.itemHeight)
-##            painter.drawLine( w + self.collapseControlWidth,y,w + self.collapseControlWidth,self.itemHeight)
-##            painter.drawLine( w + self.collapseControlWidth+1,y,w + self.collapseControlWidth+1,self.itemHeight)
-        
-##        painter.drawRect( x , y , w , h )
-        
-##        if not index.internalPointer().downloaded() and not index.internalPointer().watched():
-##            painter.setBrush( COLORSCHEME['downloadprogressh'] )
-##            painter.fillRect( x+1 , option.rect.y()+1 , max(0,int(index.internalPointer().downloadProgress()*(w/100.))-1) , option.rect.height()-1, COLORSCHEME['downloadprogressh'] )
-##            painter.fillRect( x+1 , y+1 , max(0,int(index.internalPointer().downloadProgress()*(w/100.))-1) , self.itemHeight-1, COLORSCHEME['downloadprogressh'] )
         if not index.parent().isValid(): # if this is a root node
             painter.drawRect( x+h,y,0,h)
             # draw the +/-
@@ -933,82 +714,25 @@ class ItemDelegate(QtWidgets.QStyledItemDelegate):
                 painter.fillRect( x+h/2 , y+h/4 , 1,1+h-h/4*2+1,painter.pen().color())
             painter.fillRect( x+h/4 , y+h/2 , 1+h-h/4*2+1,1,painter.pen().color())
 
-##        if self.new:
-##            pen.setColor(COLORSCHEME['downloadedfg'])
-##        elif self.downloading:
-##            pen.setColor(COLORSCHEME['notdownloadedfg'] )
-##        else:
-##            pen.setColor(COLORSCHEME['watchedfg'])
         pen.setColor(fg)
-##        pen.setColor(COLORSCHEME['downloadedfg'])
         painter.setPen(pen)
-##        print('pen 2 done')
         text = index.data(Qt.DisplayRole)
         if not index.parent().isValid():
             painter.drawText( x + h + self.textPadding[0], y , w - self.textPadding[0]-self.textPadding[1]-h, h, Qt.AlignLeft | Qt.AlignVCenter, text)
         else:
             painter.drawText( x + self.textPadding[0], y , w - self.textPadding[0]-self.textPadding[1], h, Qt.AlignLeft | Qt.AlignVCenter, text)
-##        print(option.viewItemPosition)
         painter.restore()
+        
     def sizeHint(self, option, index):
-##        print(index.data())
         fontMetrics = option.fontMetrics
-##        print(fontMetrics.height())
-##        print(fontMetrics.boundingRect(index.data()))
-##        if index.column() == 0:
-##            print('ok')
-##            text = index.data(index)
-##            print('ok')
-##            document = QtGui.QTextDocument(text)
-##            print('ok')
-##            option.font.setWeight(QtGui.QFont.Bold) #new line
-##            document.setDefaultFont(option.font)
-##            
-##            return QtCore.QSize(document.idealWidth(), fontMetrics.height())
-##        return QtWidgets.QStyledItemDelegate.sizeHint(self, option, index)
-
-####        if not index.parent().isValid():
-####            if option.state & QtWidgets.QStyle.State_Open:
-####                print('open')
-####                # this is never called again.
-####                return QtCore.QSize(option.rect.width(),self.itemHeight*5)
-####            return QtCore.QSize(option.rect.width(),self.itemHeight+2)
-####        else:
-##        print(option.rect.height())
-##        print('---')
-##        print(dir(option))
-##        print(index.row())5
-##        print(index.internalId())
-##        print(dir(index.parent()))
-##        print(option.viewItemPosition)
         if not index.parent().isValid():
             return QtCore.QSize(option.rect.width()+option.rect.x(),fontMetrics.height()+self.textVertPadding+self.listPadding[1]*2)
         else:
             return QtCore.QSize(option.rect.width()+option.rect.x(),fontMetrics.height()+self.textVertPadding-self.listPadding[1])
+        
     def getHeight(self, fontMetrics):
         return fontMetrics.height()+self.textVertPadding+self.listPadding[1]*2
-        
-    #also override sizeHint
-    
-##    def createEditor(self, parent, option, index):
-##        pass
-####        item_data = str(index.data().toString())
-####        editor = Widget(item_data.split('|'), parent=parent)
-####        return editor
-####
-##    def updateEditorGeometry(self, editor, option, index):
-        # need to subtrace collapsecontrolwidth
-##        x = option.rect.x()
-##        x= 1
-##        dw = option.decorationSize.width()
-##        dh = option.decorationSize.height()
-##        y = option.rect.y() + self.listPadding[1]//2
-##        w = option.rect.width()+option.rect.x()-3
-##        h = option.rect.height() - self.listPadding[1]
-##        editor.setGeometry(QtCore.QRect(0,option.rect.y(),option.rect.width()+option.rect.x(),option.rect.height()))
-##        pass
-##    def setEditorData(self,editor,index):
-##        pass
+
 class SingleFunction(QtCore.QRunnable):
     '''
     Worker thread
@@ -1086,33 +810,23 @@ class FullUpdate(QtCore.QRunnable):
         '''
         with closing(sql.SQLManager()) as self._sql:
             quick = self._quick
-            # if user_settings not defined you should probably just end early.
-            # emit finished signal if/when you do
-
-
-
-           #phase1prep
-
+            if not self._sql.getSettings():
+                self._signals.finished.emit()
+                return
             # do some bookkeeping
-            self._writelock = QtCore.QMutexLocker(self._writemutex)
-            # starts locked
+            self._writelock = QtCore.QMutexLocker(self._writemutex)# starts locked
             changes = self._sql.hideOldSeries()
             if changes:
                 self._signals.dataModified.emit()
             self._writelock.unlock()
-
-            #load this data when you need it to ensure it is up to date, or wrap it all in one sql transaction
-    ##        
-    ##        allseries = self._sql.getSeries()
-
-
+            
             # some time consuming stuff:
             # download the anidb title list if needed
             # hash all files awaiting hashing
-            titleList = None
             if not quick:
                 titleUpdateTime = self._sql.titleUpdateTime()
                 if titleUpdateTime:
+                    titleList = None
                     try:
                         titleList = anidb.anidb_title_list()
                     except (urllib.error.URLError,urllib.error.HTTPError) as e:
@@ -1138,7 +852,7 @@ class FullUpdate(QtCore.QRunnable):
                         self._writelock.relock()
                         self._sql.updateHash(file,ed2k,filesize)
                         self._writelock.unlock()
-            #phase1gap
+
             print('phase 1 gap')
 
             # parse your rss feed and add new episodes
@@ -1157,8 +871,6 @@ class FullUpdate(QtCore.QRunnable):
             self._writelock.unlock()
 
             # download new torrent files [must do this after the rssitems part]
-    ##        torrentDatas = []
-    ##        removeInvalidTorrents = []
             if len(newEntries):
                 user_settings = self._sql.getSettings()
             for entry in newEntries:
@@ -1170,7 +882,6 @@ class FullUpdate(QtCore.QRunnable):
                     except Exception as e:
                         print('initial bencode failed %r'%e)
                         print('pre-removing %s.'%entry[1])
-    ##                    removeInvalidTorrents.append((entry[2],len(torrentdata)))
                         self._writelock.relock()
                         self._sql.removeEpisode(entry[2],len(torrentdata)) # if torrentdata is len(0) don't blacklist
                         self._writelock.unlock()
@@ -1181,10 +892,10 @@ class FullUpdate(QtCore.QRunnable):
                     self._writelock.unlock()
             if len(newEntries):
                 self._signals.dataModified.emit()
+                
             print('phase 1 done')
 
-            #phase2prep
-            print(self._sql.getToAdd())
+            # anidb adds
             if not quick:
                 self._writelock.relock()
                 user_settings, toAdd = self._sql.getToAdd()
@@ -1205,24 +916,19 @@ class FullUpdate(QtCore.QRunnable):
                                     self._sql.removeParses((datum['path'],))
                                     self._writelock.unlock()
                                     if not datum[1] and aid>0: # if an aid did not exist but was returned by add
-    ##                                    newAids.append((aid,datum[5]))
                                         self._writelock.relock()
                                         self._sql.updateAids(((aid,datum['id']),)) # we most likely don't need to update data for this...
                                         self._writelock.unlock()
                             anidbLink.close_session()
                     finally:
                         anidbLink.end_session()
+
+                # attempt to title match one unconfirmed aid
                 self._writelock.relock()
-                self._sql.updateOneUnknownAid() # this takes AGES to run.
+                self._sql.updateOneUnknownAid()
                 self._writelock.unlock()
 
-
-
-
-
-            # this is the file update (this is also the part that should run when you pick the context menu option)
-    ##        changedFiles=[]
-    ##        removeInvalid=[]
+            # this is the file update (the part that should run when you pick the context menu option)
             user_settings = self._sql.getSettings()
             allseries = self._sql.getDownloadingSeries()
             dl_dir = user_settings['Download Directory']
@@ -1253,7 +959,6 @@ class FullUpdate(QtCore.QRunnable):
                                 self._sql.removeEpisode(episode['torrent_url'],len(torrentdata))
                                 self._writelock.unlock()
                                 continue
-    ##                                removeInvalid.append(episode['torrent_url'],len(torrentdata))
                             except Exception as e:
                                 print('bencode failed %r'%e)
                                 print('episode (%s) was removed.'%episode['display_name'])
@@ -1261,21 +966,15 @@ class FullUpdate(QtCore.QRunnable):
                                 self._sql.removeEpisode(episode['torrent_url'],len(torrentdata))
                                 self._writelock.unlock()
                                 continue
-    ##                    changedFiles.append((episode['torrent_url'],filename,torrentdata,percent_downloaded,episode['id']))
                         self._writelock.relock()
                         self._sql.setDownloading(episode['torrent_url'],filename,torrentdata,percent_downloaded)
                         self._signals.updateEpisode.emit((episode['id'],episode['torrent_url']))
                         self._writelock.unlock()
-    ##        self._writelock.relock()
-    ##        for episode in changedFiles:
-    ##            self._sql.setDownloading(episode[0],episode[1],episode[2],episode[3])
-    ##        for episode in removeInvalid:
-    ##            self._sql.removeEpisode(episode)
-    ##        self._writelock.unlock()
-    ##        for ep in changedFiles:
-    ##            self._signals.updateEpisode.emit((episode[4],episode[0]))# if we emit id,torrent that is enough
+
             print('phase 2 done')
-            #phase 3 now
+
+            # get series info for new aids
+            # download poster art as well
             if not quick:
                 wait= time.time()
                 for aid in self._sql.oneDayOldAids():
@@ -1293,13 +992,11 @@ class FullUpdate(QtCore.QRunnable):
                         date += sixtydays
                         seasonindex =(dayofyear-(dayofyear%91))//91
                         seasonname= '%s %s'%(SEASONS[seasonindex],date.strftime('%Y'))
-    ##                    toGetSeriesInfoAdds.append((aid,airdate,seasonname,imgurl))
                         self._writelock.relock()
                         self._sql.updateSeriesInfo(((aid,airdate,seasonname,imgurl),))
                         self._writelock.unlock()
                     except Exception as e:
                         print('anidb_series_info failed on %s b/c %r'%(aid,e))
-    ##                    toGetSeriesInfoFailedAdds.append(aid)
                         self._writelock.relock()
                         self._sql.updateSeriesInfoTime((aid,))
                         self._writelock.unlock()
@@ -1308,7 +1005,6 @@ class FullUpdate(QtCore.QRunnable):
                 if os.name == 'nt' and user_settings['Poster Icons']: # only works on windows.
                     newIcons = self._sql.getOutdatedPosters()
                     
-
                     '''hashes the selected files, also downloads poster art if applicable'''
                     for icon in newIcons:
                         folder_title = r''.join(i for i in icon['title'] if i not in r'\/:*?"<>|.')
@@ -1323,7 +1019,6 @@ class FullUpdate(QtCore.QRunnable):
                                 self._writelock.relock()
                                 self._sql.updateCoverArts(((icon['aid'],icon['poster_url']),))
                                 self._writelock.unlock()
-        ##                        successfulIcons.append((icon['aid'],icon['poster_url']))
                             except IOError as e:
                                 if e.errno!=errno.ENOENT:
                                     raise
@@ -1331,53 +1026,24 @@ class FullUpdate(QtCore.QRunnable):
                                     '''errno 2 is file/directory does not exist.
                                     this simply means you tried to get poster art before any episodes were downloaded.
                                     we will just try to get the art again at a later date'''
-        ##                            self.successfulIcons.append((icon['aid'],None))
                         except Exception as e:
                             print('failed to download series image for %s b/c %r'%(icon['title'],e))
-        ##                    self.successfulIcons.append((icon['aid'],None))
                         finally:
                             self._writelock.relock()
                             self._sql.updateCoverArts(((icon['aid'],None),))
                             self._writelock.unlock()
             print('phase 3 done')
             self._signals.finished.emit()
-##        # do i need to update shanalink creds? 
-        ''' there is a LOT that happens here. you can prob separate it out (q) means omit this for quick update
-series.phase1prep
-series.phase1thread
-ala.updatemid0
->
-series.phase1gap
-series.phase1thread2
-series.phase1end
-ala.updatesmid1
->
-series.phase2prep
-series.phase2thread
-updatemid2
->
-series.phase2end
-series.phase3prep
-series.phase3thread
-series.phase3end
 
-its not that confusing, but its a mess
-we can use signals to do this all in one thread.
-'''
 class SettingsDialog(QtWidgets.QDialog):
     def __init__(self,initialSettings, parent=None):
         from PyQt5.QtCore import Qt
-
-
         super(SettingsDialog, self).__init__(parent)
         self.result=None
         self.setWindowTitle(self.tr("User Settings"))
         self.setWindowFlags(self.windowFlags() &~ Qt.WindowContextHelpButtonHint)
-##        self.setSizeGripEnabled(True)
-##        self.setAttribute(Qt.WA_DeleteOnClose)
 
         mainLayout = QtWidgets.QVBoxLayout()
-##        mainLayout.addStretch(1)
 
         mainLayout.setAlignment(Qt.AlignCenter)
 
@@ -1504,17 +1170,12 @@ class StillRunningDialog(QtWidgets.QDialog):
     def __init__(self, parent=None):
         from PyQt5.QtCore import Qt
 
-
         super(StillRunningDialog, self).__init__(parent)
         self.result=0
         self.setWindowTitle(self.tr("Application is still running!"))
         self.setWindowFlags(self.windowFlags() &~ Qt.WindowContextHelpButtonHint)
-##        self.setSizeGripEnabled(True)
-##        self.setAttribute(Qt.WA_DeleteOnClose)
 
-##        mainLayout = QtGui.QGridLayout()
         mainLayout = QtWidgets.QVBoxLayout()
-##        mainLayout.addStretch(1)
 
         mainLayout.setAlignment(Qt.AlignCenter)
 
@@ -1532,7 +1193,6 @@ class StillRunningDialog(QtWidgets.QDialog):
         optionsLayout.addRow(self.dontshow)
         
         self.saveButton=QtWidgets.QPushButton('OK')
-##        confirmLayout.addWidget(QtGui.QSpacerItem(),0,0)
         confirmLayout.addWidget(self.saveButton,0,1)
         mainLayout.addWidget(top)
         mainLayout.addWidget(bottom)
@@ -1550,17 +1210,11 @@ class StillRunningDialog(QtWidgets.QDialog):
 class DropDialog(QtWidgets.QDialog):
     def __init__(self, title, parent=None):
         from PyQt5.QtCore import Qt
-
-
         super(DropDialog, self).__init__(parent)
         self.setWindowTitle(self.tr("Drop Series"))
         self.setWindowFlags(self.windowFlags() &~ Qt.WindowContextHelpButtonHint)
-##        self.setSizeGripEnabled(True)
-##        self.setAttribute(Qt.WA_DeleteOnClose)
 
-##        mainLayout = QtGui.QGridLayout()
         mainLayout = QtWidgets.QVBoxLayout()
-##        mainLayout.addStretch(1)
         mainLayout.setAlignment(Qt.AlignCenter)
 
         optionsLayout = QtWidgets.QFormLayout()
@@ -1580,7 +1234,6 @@ Are you sure you want to drop %s?'''%(title,title),None)
         
         self.confirmButton=QtWidgets.QPushButton('OK')
         self.cancelButton=QtWidgets.QPushButton('Cancel')
-##        confirmLayout.addWidget(QtGui.QSpacerItem(),0,0)
         confirmLayout.addWidget(self.confirmButton,0,1)
         confirmLayout.addWidget(self.cancelButton,0,2)
         mainLayout.addWidget(top)
@@ -1624,11 +1277,9 @@ class HideableWithDialog(HideableWindow):
 
 from qtrayico import Systray
 
-
 class trayIcon(Systray):
     def __init__(self,window,model,lock):
         super(trayIcon,self).__init__(window)
-##        self.seriesManager=seriesManager
         self._sql = sql.SQLManager()
         self._writelock = lock
         self._model = model
@@ -1737,7 +1388,6 @@ ul { margin: 0; padding: 0; }
 
     def refresh(self):
         self._model.quickUpdate()
-##        self.main_window.centralWidget().quickUpdate()
         
     def showConfig(self):
         self._model.configDialog(self.main_window)
@@ -1798,16 +1448,14 @@ if __name__ == '__main__':
     main.setWindowTitle('Alastore')
     main.setWindowIcon(QtGui.QIcon(resource_path("book.ico")))
     tray = trayIcon(main,model,writelock)
-##    dlg = AccordianWidget(a,main)
-##    dlg.populate(a)
 
     main.setCentralWidget(treeView)
     main.resize(QtCore.QSize(350,delegate.listPadding[1]+delegate.getHeight(treeView.fontMetrics())*rootNode.childCount()))
 ##    main.move(QtCore.QPoint(main.pos().x(),0))
-    main.show()
+    if '-q' not in sys.argv and '/q' not in sys.argv and '/silent' not in sys.argv:
+        main.show()
     app.setQuitOnLastWindowClosed(False)
     s = sql.SQLManager(createtables = True)
     s.close()
     
     sys.exit(app.exec_())
-##        conn.close()

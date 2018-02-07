@@ -47,6 +47,9 @@ class SQLManager:
         self.cursor = self.conn.cursor()
         if createtables:
             self._createTables()
+        self.conn.create_function('removeNonAlphaAndSpaces',1,self.removeNonAlphaAndSpaces)
+        self.conn.create_function('editdist',2,self.editdist)
+        self.conn.create_function('expandvars',1,self.expandvars)
         
     # Open a connection to the db. Will be used by this SQLManager until it is closed.
     def connect(self):
@@ -75,9 +78,6 @@ class SQLManager:
     def _createTables(self):
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS titles
                  (aid integer, type text, lang text, title text PRIMARY KEY)''')
-        self.conn.create_function('removeNonAlphaAndSpaces',1,self.removeNonAlphaAndSpaces)
-        self.conn.create_function('editdist',2,self.editdist)
-        self.conn.create_function('expandvars',1,self.expandvars)
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS user_settings
                  (id integer PRIMARY KEY DEFAULT 0, rss text DEFAULT '', dl_dir text DEFAULT '', st_dir text DEFAULT '', anidb_username text DEFAULT '', anidb_password text DEFAULT '',
                  season_sort integer DEFAULT 2, custom_icons integer DEFAULT 2, title_update integer DEFAULT 0, dont_show_again integer DEFAULT 0,
