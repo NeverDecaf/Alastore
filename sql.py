@@ -120,7 +120,6 @@ custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shan
         settings = self.cursor.fetchone()
         if fetchanyway:
             return settings
-##            return dict(list(zip(self.COLUMN_NAMES,settings)))
         if not settings:
             return None
         if not settings['RSS Feed'] and not settings['Download Directory'] and not settings['Save Directory']:
@@ -132,10 +131,6 @@ custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shan
         self.cursor.execute('''UPDATE episode_data SET watched=1,path=? WHERE path=?''',(dest_path,source_path))
         self.cursor.execute('''REPLACE INTO parse_data (path,id,episode,subgroup,ed2k,filesize) SELECT path,id,episode,subgroup,?,? FROM episode_data WHERE path=? LIMIT 1''',(ed2k,filesize,dest_path))
         self.conn.commit()
-    
-##    def queueFile(self,path):
-##        self.cursor.execute('''INSERT OR IGNORE INTO parse_data (path,id,episode,subgroup) SELECT path,id,episode,subgroup FROM episode_data WHERE path=?''',(path,))
-##        self.conn.commit()
 
     def getShowAgain(self):
         self.cursor.execute('''SELECT dont_show_again FROM user_settings where id=0''')
@@ -158,10 +153,6 @@ custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shan
                         episode_data JOIN shana_series ON shana_series.id=episode_data.id WHERE shana_series.id=? AND torrent=? ORDER BY episode ASC''',(shana_id,torrent_url))
         results = self.cursor.fetchone()
         return results
-##        d = defaultdict(list)
-##        for r in results:
-##            d[r['title']].append(r)
-##        return d
     
     def getDownloadingSeries(self):
         self.cursor.execute('''SELECT shana_series.id as id,file_name,episode,path,display_name,watched,downloaded,subgroup,hidden,torrent as torrent_url,torrent_data,download_percent,title,season FROM
@@ -201,10 +192,6 @@ custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shan
     def unHideSeries(self, title):
         self.cursor.execute('''UPDATE shana_series SET hidden=0 WHERE title=?''',(title,))
         self.conn.commit()
-##
-##    def isHidden(self, title):
-##        self.cursor.execute('''SELECT hidden FROM shana_series WHERE title=?''',(title,))
-##        return self.cursor.fetchall()
 
     def addTorrentData(self,path,torrenturl,torrentdata,filename):
         self.cursor.execute('''UPDATE episode_data SET path=?,torrent_data=?,file_name=? WHERE torrent=?''',
@@ -250,19 +237,6 @@ custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shan
         self.conn.commit()
         return 1
 
-##    def getSeriesTitle(self, id):
-##        self.cursor.execute('''SELECT title FROM shana_series WHERE id=?''',(id,))
-##        results = self.cursor.fetchone()
-##        if results:
-##            return results[0]
-##        return None
-##    
-##    def getSeriesSeason(self, id):
-##        self.cursor.execute('''SELECT season FROM shana_series WHERE id=?''',(id,))
-##        results = self.cursor.fetchone()
-##        if results:
-##            return results[0]
-##        return None
     def getTorrentBlacklist(self):
         ' returns a set() of blacklisted torrents where each key is a url'
         ' also removes any outdated blacklist entries '
@@ -301,10 +275,6 @@ custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shan
             torrentdata = None
         self.cursor.execute('''UPDATE episode_data SET downloaded=?,file_name=?,path=?,torrent_data=?,download_percent=? WHERE torrent=?''',(downloaded,filename,path,torrentdata,percent_downloaded,torrent_url))
         self.conn.commit()
-
-##    def setWatched(self,path):
-##        self.cursor.execute('''UPDATE episode_data SET watched=1 WHERE path=?''',(path,))
-##        self.conn.commit()
 
     def getAllWatchedPaths(self,path):
         '''gets a list of paths for all watched files/episodes for series matching the given filepath'''
@@ -359,10 +329,7 @@ custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shan
     def getUnhashed(self):
         self.cursor.execute('''SELECT path,id FROM parse_data WHERE ed2k IS NULL''')
         return set([r['path'] for r in self.cursor.fetchall()])
-##        files={}
-##        for tup in self.cursor.fetchall():
-##            files[tup[0]]=None
-##        return files
+
     def updateHash(self,path,ed2k,filesize):
         if path!=None:
             self.cursor.execute('''UPDATE parse_data SET ed2k=?,filesize=? WHERE path=?''',(ed2k,filesize,path))
@@ -381,12 +348,13 @@ custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shan
     therefore you will have to modify that method to always update aids'''
     # some clarification: an add attempt is made based on the last add attempt. the formula is: gap since last add = number of days since file was added/24 in hours.
     # in other words, a file that was hashed 200 days ago will wait 200 hours between successive anidb add attempts.
+    # min is equiv to one day (so min of 1 hr between adds)
     def getToAdd(self):
         settings=self.getSettings()
         if not settings or not settings['anidb Username']:
-            return None,None
+            return None,[]
         self.cursor.execute('''SELECT path,CASE WHEN verified_aid=0 THEN NULL ELSE aid END AS aid,subgroup AS `group`,episode AS epno,ed2k,parse_data.id AS id,added_on<strftime('%s', 'now')-? as do_generic_add
-                                FROM parse_data JOIN shana_series WHERE shana_series.id=parse_data.id AND ed2k NOT NULL AND strftime('%s', 'now')-(strftime('%s', 'now')-added_on)/24>last_add_attempt''', (ANIDB_WAIT_TIME,))
+                                FROM parse_data JOIN shana_series WHERE shana_series.id=parse_data.id AND ed2k NOT NULL AND strftime('%s', 'now') - 3600*((strftime('%s', 'now')-added_on)/86400+1) > last_add_attempt''', (ANIDB_WAIT_TIME,))
         result = self.cursor.fetchall()
         for file in result:
             self.cursor.execute('''UPDATE parse_data SET last_add_attempt=strftime('%s', 'now') WHERE ed2k=?''',(file['ed2k'],)) # go back in and updated the last_add_attempt of everything we are adding

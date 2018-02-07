@@ -107,8 +107,8 @@ class anidbInterface:
 ##        if s!=None:s.close()
 ##        pass
 
-    def end_session(self):
-        self._close_socket()
+##    def end_session(self):
+##        self._close_socket()
         
     def open_session(self,user,passw):
         if user==None or passw==None:
@@ -123,10 +123,11 @@ class anidbInterface:
             return None
         return -1
         
-    def close_session(self):
+    def close(self):
         if not self.socket:
             return None
-        return self._logout()
+        self._logout()
+        self._close_socket()
 
     'should return -1 or aid on success'
     'None or 0 on failure'

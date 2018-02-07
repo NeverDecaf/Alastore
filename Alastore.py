@@ -903,8 +903,7 @@ class FullUpdate(QtCore.QRunnable):
                 
                 self.newAids=[]
                 if user_settings and len(toAdd) and user_settings['anidb Username'] and user_settings['anidb Password']:
-                    anidbLink = anidb.anidbInterface()
-                    try:
+                    with closing(anidb.anidbInterface()) as anidbLink:
                         if anidbLink.open_session(user_settings['anidb Username'],user_settings['anidb Password']):
                             for datum in toAdd:
                                 aid=anidbLink.add_file(datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add'])
@@ -919,9 +918,6 @@ class FullUpdate(QtCore.QRunnable):
                                         self._writelock.relock()
                                         self._sql.updateAids(((aid,datum['id']),)) # we most likely don't need to update data for this...
                                         self._writelock.unlock()
-                            anidbLink.close_session()
-                    finally:
-                        anidbLink.end_session()
 
                 # attempt to title match one unconfirmed aid
                 self._writelock.relock()
@@ -1439,6 +1435,8 @@ if __name__ == '__main__':
     fullupdatetimer.setInterval(FULLUPDATE_TIME)
     fullupdatetimer.timeout.connect(lambda: threadpool.start(fullupdate))
     fullupdatetimer.start()
+
+##    QtCore.QTimer.singleShot(2000,lambda: threadpool.start(fullupdate))
 
     QtCore.QTimer.singleShot(INITIALUPDATE_GRACEPERIOD,lambda: threadpool.start(fileupdate))
     
