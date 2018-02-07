@@ -47,7 +47,8 @@ class SQLManager:
     def __init__(self, db='Alastore.db'):
         self.db=db
         self.conn=sqlite3.connect(self.db)#,check_same_thread=False)
-        self.conn.row_factory = dict_factory#sqlite3.Row
+##        self.conn.row_factory = dict_factory#sqlite3.Row
+        self.conn.row_factory = sqlite3.Row
         self.cursor = self.conn.cursor()
         self._createTables()
     

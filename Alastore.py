@@ -24,45 +24,44 @@ FULLUPDATE_TIME = 1000 * 60 * 10 #once every 10 m
 INITIALUPDATE_GRACEPERIOD = 1000 * 60 * 2 # 2m (this is time before the first (only) quick update)
 
 class Node(object):
-    class objectview(object):
-        def __init__(self, d):
-            self.__dict__ = d
+##    class objectview(object):
+##        def __init__(self, d):
+##            self.__dict__ = d
     def __init__(self, data, parent=None):
-        self._data = self.objectview(data)
+        self._data = data
 ##        self._name = name
 ##        print(dir(self._data))
 ##        print(self._data.display_name)
         self._children = []
         self._parent = parent
-
-##        self._t_downloaded = random.randint(0,1)
-##        self._t_watched = random.randint(0,1)
-##        self._t_progress = random.randint(0,100)
         
         if parent is not None:
             parent.addChild(self)
+            
     def setData(self,newData):
-        self._data = self.objectview(newData)
+        self._data = newData
+        
     def watched(self):
-        return self._data.watched
+        return self._data['watched']
     def title(self):
-        return self._data.title
+        return self._data['title']
     def downloaded(self):
-        return self._data.downloaded
+        return self._data['downloaded']
     def downloadProgress(self):
-        return self._data.download_percent
+        return self._data['download_percent']
     def episode(self):
-        return self._data.episode
+        return self._data['episode']
     def id(self):
-        return self._data.id
+        return self._data['id']
     def torrent_url(self):
-        return self._data.torrent_url
+        return self._data['torrent_url']
     def season(self):
-        return self._data.season
+        return self._data['season']
     def path(self):
-        return self._data.path
+        return self._data['path']
     def file_name(self):
-        return self._data.file_name
+        return self._data['file_name']
+    
     def getChildById(self,series_id):
         for i in self._children:
             if i.id() == series_id:
@@ -71,15 +70,8 @@ class Node(object):
         for j in self._children:
             if j.torrent_url() == torrent_url:
                 return j
-            
-    def setwatched(self, i):
-        self._data.watched=i
-##    def setdownloaded(self, i):
-##        self._t_downloaded=i
-##    def setdownloadProgress(self, i):
-##        self._t_progress=i
-##    def setepisode(self,i):
-##        self._episode = i
+    def name(self):
+        return self._data['display_name']
 
 
     def typeInfo(self):
@@ -107,12 +99,6 @@ class Node(object):
 
         return True
 
-
-    def name(self):
-        return self._data.display_name
-
-##    def setName(self, name):
-##        self._name = name
 
     def child(self, row):
         return self._children[row]
@@ -1363,8 +1349,7 @@ class FullUpdate(QtCore.QRunnable):
         #phase 3 now
         if not quick:
             wait= time.time()
-            for wrappertuple in self._sql.oneDayOldAids():
-                aid=wrappertuple[0]
+            for aid in self._sql.oneDayOldAids():
                 try:
                     while time.time() - wait < 2: pass
                     airdate,imgurl = anidb.anidb_series_info(aid)
