@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import logging
 from contextlib import closing
+from functools import partial
 from shana_interface import ShanaLink
 FULLUPDATE_TIME = 1000 * 60 * 10 #once every 10 m
 INITIALUPDATE_GRACEPERIOD = 1000 * 60 * 2 # 2m (this is time before the first (only) quick update)
@@ -659,18 +660,9 @@ class TreeView(QtWidgets.QTreeView):
     def openMenu(self, position):
         index = self.selectedIndexes()[0]
         menu = QtWidgets.QMenu()
-        pairs = self.model().getContextOptions(not index.parent().isValid())
-        # I don't know if this is my fault or an actual bug but you cannot create these dynamically.
-        action = menu.addAction(pairs[0][0])
-        action.triggered.connect(lambda: pairs[0][1](index,self))
-        action = menu.addAction(pairs[1][0])
-        action.triggered.connect(lambda: pairs[1][1](index,self))
-        action = menu.addAction(pairs[2][0])
-        action.triggered.connect(lambda: pairs[2][1](index,self))
-        if len(pairs)>3:
-            action = menu.addAction(pairs[3][0])
-            action.triggered.connect(lambda: pairs[3][1](index,self))
-
+        for text, func in self.model().getContextOptions(not index.parent().isValid()):
+            action = menu.addAction(text)
+            action.triggered.connect(partial(func,index,self))
         menu.exec_(self.viewport().mapToGlobal(position))
         
     def drawBranches(self, painter, rect, index):
@@ -834,7 +826,7 @@ class FullUpdate(QtCore.QRunnable):
         super(FullUpdate, self).__init__()
 ##        self._conn=conn
         self._quick=quick
-        self._writemutex = writelock
+        self._writelock = writelock
         self._signals = WorkerSignals()
 
     @QtCore.pyqtSlot()
