@@ -98,6 +98,8 @@ def percentCompleted(torrent_file,filepath):
 ##    metainfo = bencode.bdecode(torrent_file.read())
     metainfo = lt.bdecode(torrent_file.read())
     info = metainfo[b'info']
+    if b'files' in info:
+            raise BatchTorrentException('torrent contains multiple files')
     filename = io.BytesIO(info[b'name'])
     pieces = io.BytesIO(info[b'pieces'])
     piececount=0

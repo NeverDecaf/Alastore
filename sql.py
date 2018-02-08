@@ -384,3 +384,4 @@ ELSE aid END AS aid
         for pair in aids:
             self.cursor.execute('''UPDATE shana_series SET aid=?,verified_aid=1 WHERE id=?''',pair)
         self.conn.commit()
+

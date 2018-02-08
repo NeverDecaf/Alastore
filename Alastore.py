@@ -78,7 +78,11 @@ class Node(object):
         for j in self._children:
             if j.torrent_url() == torrent_url:
                 return j
-
+    def getChildBySeries(self,series):
+        for j in self._children:
+            if j.title() == series:
+                return j
+            
     def typeInfo(self):
         return "NODE"
 
@@ -166,6 +170,7 @@ class HeaderNode(Node):
         if len(self._children):
             self._currentIndex = 0
             self._current = self._children[0]
+            return
         #this isnt good but this case should never be reached
         self._currentIndex = 0
         self._current = self
@@ -197,14 +202,12 @@ class TreeModel(QtCore.QAbstractItemModel):
 
     def _updateData(self):
         self.data = self._sqlManager.getSeries()
-        headers = self._rootNode.getChildren()
-        for i in range(len(headers)):
-            if headers[i].series not in self.data or not self.data[series]:
-                self.removeRows(i,1,QtCore.QModelIndex())
+        # remove headers that no longer exist in data:
+        for toremove in [header for header in self._rootNode.getChildren() if header.series() not in self.data or not self.data[header.series()]]:
+            self.removeHeader(toremove)
         for series in sorted(self.data.keys()):
             if self.data[series]:
-                # remove all contents of old header
-                head = self._rootNode.getChildById(series)
+                head = self._rootNode.getChildBySeries(series)
                 if not head:
                     head = HeaderNode(self.data[series][-1], series, self._rootNode)
                 else:
@@ -432,7 +435,7 @@ You should only use this option if a file fails to download or is moved/deleted 
         
     def sqlDataChanged(self):
         # if something was changed by an external source (thread)
-        # just reload all data and emit layoutchanged      
+        # just reload all data and emit layoutchanged
         self._updateData()
         self.sort()
         self.dataChanged.emit(QtCore.QModelIndex(),QtCore.QModelIndex(),[]) # keep it simple and just refresh everything.
@@ -599,7 +602,19 @@ You should only use this option if a file fails to download or is moved/deleted 
         self.endInsertRows()
 
         return success
+    
+    def removeHeader(self, node):
+        if not isinstance(node,HeaderNode):
+            return None
 
+        self.beginRemoveRows(QtCore.QModelIndex(), node.row(), node.row())
+        
+        success = self._rootNode.removeChild(node.row())
+        
+        self.endRemoveRows()
+        
+        return success
+    
     """INPUTS: int, int, QModelIndex"""
     def removeRows(self, position, rows, parent=QtCore.QModelIndex()):
         
@@ -615,7 +630,9 @@ You should only use this option if a file fails to download or is moved/deleted 
     
     def sort(self, column=0, order=QtCore.Qt.AscendingOrder):
         #only 1 column here
+        self.layoutAboutToBeChanged.emit()
         self._rootNode.sort()
+        self.layoutChanged.emit()
         pass
         
 #-------------------------------------------------------------------------------
@@ -934,7 +951,7 @@ class FullUpdate(QtCore.QRunnable):
             dl_dir = user_settings['Download Directory']
             # we replace space with _ here, make sure to do this to all the strings you want to match.
             originalFiles = os.listdir(dl_dir)
-            potentialFiles = [re.sub(r'[ ]',r'_',x) for x in originalFiles]
+            potentialFiles = [re.sub(r'[ ]+',r'_',x) for x in originalFiles]
             potentialMatches = dict(list(zip(potentialFiles,originalFiles)))
             for series in list(allseries.values()):
                 for episode in series:
@@ -968,9 +985,10 @@ class FullUpdate(QtCore.QRunnable):
                                 continue
                         self._writelock.relock()
                         self._sql.setDownloading(episode['torrent_url'],filename,torrentdata,percent_downloaded)
-                        self._signals.updateEpisode.emit((episode['id'],episode['torrent_url']))
+##                        self._signals.updateEpisode.emit((episode['id'],episode['torrent_url']))
                         self._writelock.unlock()
-
+            if len(allseries):
+                self._signals.dataModified.emit()
             # get series info for new aids
             # download poster art as well
             if not quick:
