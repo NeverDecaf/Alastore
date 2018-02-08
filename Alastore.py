@@ -1,4 +1,5 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5.QtCore import QMutexLocker
 import sys
 import sqlite3
 import time
@@ -162,10 +163,10 @@ class HeaderNode(Node):
             return self._series+' %i'%self._current.episode()
 
     def _getlatest(self):
-        for i in range(len(self._children)-1,-1,-1):
-            if not self._children[i].watched():
+        for i, child in enumerate(reversed(self._children)):
+            if not child.watched():
                 self._currentIndex = i
-                self._current = self._children[i]
+                self._current = child
                 return
         if len(self._children):
             self._currentIndex = 0
@@ -310,7 +311,9 @@ class TreeModel(QtCore.QAbstractItemModel):
         opt.append((self.tr("&Mark All Watched"),self.markSeriesWatched))
 ##        if not isheader:
         opt.append((self.tr("&Mark Episode Watched"),self.markEpisodeWatched))
-        opt.append((self.tr("&Drop Series"),self.dropSeries))
+        user_settings = self._sqlManager.getSettings()
+        if user_settings['Shana Project Username'] and user_settings['Shana Project Password']:
+            opt.append((self.tr("&Drop Series"),self.dropSeries))
         return opt
         
     def hideSeries(self,index,parent):
@@ -322,8 +325,10 @@ Are you sure you wish to hide the following series?
 {}''').format(index.internalPointer().title()),
                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No):
             if self._writelock.tryLock():
-                self._sqlManager.hideSeries(index.internalPointer().id())
-                self._writelock.unlock()
+                try:
+                    self._sqlManager.hideSeries(index.internalPointer().id())
+                finally:
+                    self._writelock.unlock()
                 self.sqlDataChanged()
             else:
                 t = SQLSingleFunction(self._writelock,'hideSeries',index.internalPointer().id())
@@ -342,8 +347,10 @@ Are you sure you wish to mark all episodes of {} as watched?
 (You cannot undo this action)''').format(index.internalPointer().title(),index.internalPointer().title()),
             QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No):
             if self._writelock.tryLock():
-                self._sqlManager.forceWatched(id = index.internalPointer().id())
-                self._writelock.unlock()
+                try:
+                    self._sqlManager.forceWatched(id = index.internalPointer().id())
+                finally:
+                    self._writelock.unlock()
                 self.sqlDataChanged()
             else:
                 t = SQLSingleFunction(self._writelock,'forceWatched',id=index.internalPointer().id())
@@ -353,13 +360,15 @@ Are you sure you wish to mark all episodes of {} as watched?
     def markEpisodeWatched(self,index,parent):
         if QtWidgets.QMessageBox.Yes == QtWidgets.QMessageBox.warning(
             parent, self.tr("Mark Watched?"),
-            self.tr('''Are you sure you want to force mark the file: %s as watched?
+            self.tr('''Are you sure you want to force mark the file: {} as watched?
 Force marking a file this way will NOT automatically sort/move the file and it will NEVER add the file to your mylist.
 You should only use this option if a file fails to download or is moved/deleted before you can watch it through Alastore.''').format(index.internalPointer().name()),
             QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No):
             if self._writelock.tryLock():
-                self._sqlManager.forceWatched(torrenturl = index.internalPointer().torrent_url())
-                self._writelock.unlock()
+                try:
+                    self._sqlManager.forceWatched(torrenturl = index.internalPointer().torrent_url())
+                finally:
+                    self._writelock.unlock()
                 self.updateEpisodeByIndex(index)
             else:
                 t = SQLSingleFunction(self._writelock,'forceWatched',torrenturl = index.internalPointer().torrent_url())
@@ -407,8 +416,10 @@ You should only use this option if a file fails to download or is moved/deleted 
             showagain=d.getValues()
             if showagain:
                 if self._writelock.tryLock():
-                    self._sqlManager.setShowAgain(showagain)
-                    self._writelock.unlock()
+                    try:
+                        self._sqlManager.setShowAgain(showagain)
+                    finally:
+                        self._writelock.unlock()
                 else:
                     t = SQLSingleFunction(self._writelock,'setShowAgain',showagain)
                     self._threadpool.start(t)
@@ -420,8 +431,10 @@ You should only use this option if a file fails to download or is moved/deleted 
         if d.getValues():
             settings = d.getValues()
             if self._writelock.tryLock():
-                self._sqlManager.saveSettings(*[settings[key] for key in self._sqlManager.COLUMN_NAMES])
-                self._writelock.unlock()
+                try:
+                    self._sqlManager.saveSettings(*[settings[key] for key in self._sqlManager.COLUMN_NAMES])
+                finally:
+                    self._writelock.unlock()
             else:
                 t = SQLSingleFunction(self._writelock,'saveSettings',*[settings[key] for key in self._sqlManager.COLUMN_NAMES])
                 self._threadpool.start(t)
@@ -765,7 +778,7 @@ class SingleFunction(QtCore.QRunnable):
     def __init__(self, func, lock):
         super(SingleFunction, self).__init__()
         self._func = func
-        self._lock = lock
+        self._writelock = lock
         self._signals = WorkerSignals()
 
     @QtCore.pyqtSlot()
@@ -773,14 +786,12 @@ class SingleFunction(QtCore.QRunnable):
         '''
         Your code goes in this function
         '''
-        self._lock.lock()
-        try:
-            self._func()
-            self._signals.finished.emit()
-        except:
-            self._signals.finishedWithErrors.emit()
-        finally:
-            self._lock.unlock()
+        with QMutexLocker(self._writelock):
+            try:
+                self._func()
+                self._signals.finished.emit()
+            except:
+                self._signals.finishedWithErrors.emit()
 
 class SQLSingleFunction(QtCore.QRunnable):
     '''
@@ -791,7 +802,7 @@ class SQLSingleFunction(QtCore.QRunnable):
         self._func = func
         self._args = args
         self._kwargs = kwargs
-        self._lock = lock
+        self._writelock = lock
         self._signals = WorkerSignals()
 
     @QtCore.pyqtSlot()
@@ -800,14 +811,12 @@ class SQLSingleFunction(QtCore.QRunnable):
         Your code goes in this function
         '''
         with closing(sql.SQLManager()) as sql:
-            self._lock.lock()
-            try:
-                getattr(sql, self._func)(*self._args, **self._kwargs)
-                self._signals.finished.emit()
-            except:
-                self._signals.finishedWithErrors.emit()
-            finally:
-                self._lock.unlock()
+            with QMutexLocker(self._writelock):
+                try:
+                    getattr(sql, self._func)(*self._args, **self._kwargs)
+                    self._signals.finished.emit()
+                except:
+                    self._signals.finishedWithErrors.emit()
 
 class WorkerSignals(QtCore.QObject):
     finished = QtCore.pyqtSignal()
@@ -839,11 +848,10 @@ class FullUpdate(QtCore.QRunnable):
                 self._signals.finished.emit()
                 return
             # do some bookkeeping
-            self._writelock = QtCore.QMutexLocker(self._writemutex)# starts locked
-            changes = self._sql.hideOldSeries()
-            if changes:
-                self._signals.dataModified.emit()
-            self._writelock.unlock()
+            with QMutexLocker(self._writelock):
+                changes = self._sql.hideOldSeries()
+                if changes:
+                    self._signals.dataModified.emit()
             
             # some time consuming stuff:
             # download the anidb title list if needed
@@ -858,9 +866,8 @@ class FullUpdate(QtCore.QRunnable):
                         'banned or site is down'
                         print('failed to fetch anidb title list. (%r)'%e)
                     if titleList:
-                        self._writelock.relock()
-                        self._sql.cacheTitles(titleList)
-                        self._writelock.unlock()
+                        with QMutexLocker(self._writelock):
+                            self._sql.cacheTitles(titleList)
                         # updates user_settings
                 
                 toHash = self._sql.getUnhashed()
@@ -874,24 +881,22 @@ class FullUpdate(QtCore.QRunnable):
                         # if hashing fails on one file, we don't want to exclude the others.
                         hasherrors+=1 # we never do anything with this var though....
                     if ed2k:
-                        self._writelock.relock()
-                        self._sql.updateHash(file,ed2k,filesize)
-                        self._writelock.unlock()
+                        with QMutexLocker(self._writelock):
+                            self._sql.updateHash(file,ed2k,filesize)
 
             # parse your rss feed and add new episodes
             user_settings = self._sql.getSettings()
             rssitems = rss.RSSReader().getFiles(user_settings['RSS Feed'])
-            self._writelock.relock()
-            newEntries = []
-            torrentBlacklist = self._sql.getTorrentBlacklist()
-            for item in rssitems:
-                if item[2] not in torrentBlacklist:
-                                                                                                #file name, rsstitle,torrent url 
-                    if self._sql.addEpisode(os.path.join(user_settings['Download Directory'],item[1]),item[0],item[2]):
-                        newEntries.append(item)
-            if len(newEntries):
-                self._signals.dataModified.emit()
-            self._writelock.unlock()
+            with QMutexLocker(self._writelock):
+                newEntries = []
+                torrentBlacklist = self._sql.getTorrentBlacklist()
+                for item in rssitems:
+                    if item[2] not in torrentBlacklist:
+                                                                                                    #file name, rsstitle,torrent url 
+                        if self._sql.addEpisode(os.path.join(user_settings['Download Directory'],item[1]),item[0],item[2]):
+                            newEntries.append(item)
+                if len(newEntries):
+                    self._signals.dataModified.emit()
 
             # download new torrent files [must do this after the rssitems part]
             if len(newEntries):
@@ -905,23 +910,20 @@ class FullUpdate(QtCore.QRunnable):
                     except Exception as e:
                         print('initial bencode failed %r'%e)
                         print('pre-removing %s.'%entry[1])
-                        self._writelock.relock()
-                        self._sql.removeEpisode(entry[2],len(torrentdata)) # if torrentdata is len(0) don't blacklist
-                        self._writelock.unlock()
+                        with QMutexLocker(self._writelock):
+                            self._sql.removeEpisode(entry[2],len(torrentdata)) # if torrentdata is len(0) don't blacklist
                         continue
                     path = os.path.join(user_settings['Download Directory'],filename)
-                    self._writelock.relock()
-                    self._sql.addTorrentData(path,entry[2],torrentdata,filename)
-                    self._writelock.unlock()
+                    with QMutexLocker(self._writelock):
+                        self._sql.addTorrentData(path,entry[2],torrentdata,filename)
             if len(newEntries):
                 self._signals.dataModified.emit()
 
             # anidb adds
             if not quick:
-                self._writelock.relock()
-                user_settings, toAdd = self._sql.getToAdd()
-                self._writelock.unlock()
-                
+                with QMutexLocker(self._writelock):
+                    user_settings, toAdd = self._sql.getToAdd()
+                    
                 self.newAids=[]
                 if user_settings and len(toAdd) and user_settings['anidb Username'] and user_settings['anidb Password']:
                     with closing(anidb.anidbInterface()) as anidbLink:
@@ -932,18 +934,15 @@ class FullUpdate(QtCore.QRunnable):
                                 logging.debug('anidb add status:%s, vars used: %s\t%s\t%s\t%s\t%s\t%s'%(aid,datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add']))
                                 
                                 if aid:#if the add succeeded.
-                                    self._writelock.relock()
-                                    self._sql.removeParses((datum['path'],))
-                                    self._writelock.unlock()
+                                    with QMutexLocker(self._writelock):
+                                        self._sql.removeParses((datum['path'],))
                                     if not datum[1] and aid>0: # if an aid did not exist but was returned by add
-                                        self._writelock.relock()
-                                        self._sql.updateAids(((aid,datum['id']),)) # we most likely don't need to update data for this...
-                                        self._writelock.unlock()
+                                        with QMutexLocker(self._writelock):
+                                            self._sql.updateAids(((aid,datum['id']),)) # we most likely don't need to update data for this...
 
                 # attempt to title match one unconfirmed aid
-                self._writelock.relock()
-                self._sql.updateOneUnknownAid()
-                self._writelock.unlock()
+                with QMutexLocker(self._writelock):
+                    self._sql.updateOneUnknownAid()
 
             # this is the file update (the part that should run when you pick the context menu option)
             user_settings = self._sql.getSettings()
@@ -972,21 +971,18 @@ class FullUpdate(QtCore.QRunnable):
                             except torrentprogress.BatchTorrentException as e:
                                 print('bencode failed %r'%e)
                                 print('episode (%s) was removed.'%episode['display_name'])
-                                self._writelock.relock()
-                                self._sql.removeEpisode(episode['torrent_url'],len(torrentdata))
-                                self._writelock.unlock()
+                                with QMutexLocker(self._writelock):
+                                    self._sql.removeEpisode(episode['torrent_url'],len(torrentdata))
                                 continue
                             except Exception as e:
                                 print('bencode failed %r'%e)
                                 print('episode (%s) was removed.'%episode['display_name'])
-                                self._writelock.relock()
-                                self._sql.removeEpisode(episode['torrent_url'],len(torrentdata))
-                                self._writelock.unlock()
+                                with QMutexLocker(self._writelock):
+                                    self._sql.removeEpisode(episode['torrent_url'],len(torrentdata))
                                 continue
-                        self._writelock.relock()
-                        self._sql.setDownloading(episode['torrent_url'],filename,torrentdata,percent_downloaded)
-##                        self._signals.updateEpisode.emit((episode['id'],episode['torrent_url']))
-                        self._writelock.unlock()
+                        with QMutexLocker(self._writelock):
+                            self._sql.setDownloading(episode['torrent_url'],filename,torrentdata,percent_downloaded)
+##                          self._signals.updateEpisode.emit((episode['id'],episode['torrent_url']))
             if len(allseries):
                 self._signals.dataModified.emit()
             # get series info for new aids
@@ -1008,14 +1004,12 @@ class FullUpdate(QtCore.QRunnable):
                         date += sixtydays
                         seasonindex =(dayofyear-(dayofyear%91))//91
                         seasonname= '%s %s'%(SEASONS[seasonindex],date.strftime('%Y'))
-                        self._writelock.relock()
-                        self._sql.updateSeriesInfo(((aid,airdate,seasonname,imgurl),))
-                        self._writelock.unlock()
+                        with QMutexLocker(self._writelock):
+                            self._sql.updateSeriesInfo(((aid,airdate,seasonname,imgurl),))
                     except Exception as e:
                         print('anidb_series_info failed on %s b/c %r'%(aid,e))
-                        self._writelock.relock()
-                        self._sql.updateSeriesInfoTime((aid,))
-                        self._writelock.unlock()
+                        with QMutexLocker(self._writelock):
+                            self._sql.updateSeriesInfoTime((aid,))
                         
                 user_settings = self._sql.getSettings()
                 if os.name == 'nt' and user_settings['Poster Icons']: # only works on windows.
@@ -1032,9 +1026,8 @@ class FullUpdate(QtCore.QRunnable):
                             try:
                                 if icon['aid'] and os.path.exists(dest_folder) and (not os.path.exists(os.path.join(dest_folder,'%i.ico'%icon['aid'])) or not icon['nochange']):
                                     makeico.makeIcon(icon['aid'],icon['poster_url'],dest_folder)
-                                self._writelock.relock()
-                                self._sql.updateCoverArts(((icon['aid'],icon['poster_url']),))
-                                self._writelock.unlock()
+                                with QMutexLocker(self._writelock):
+                                    self._sql.updateCoverArts(((icon['aid'],icon['poster_url']),))
                             except IOError as e:
                                 if e.errno!=errno.ENOENT:
                                     raise
@@ -1045,9 +1038,8 @@ class FullUpdate(QtCore.QRunnable):
                         except Exception as e:
                             print('failed to download series image for %s b/c %r'%(icon['title'],e))
                         finally:
-                            self._writelock.relock()
-                            self._sql.updateCoverArts(((icon['aid'],None),))
-                            self._writelock.unlock()
+                            with QMutexLocker(self._writelock):
+                                self._sql.updateCoverArts(((icon['aid'],None),))
             self._signals.finished.emit()
 
 class SettingsDialog(QtWidgets.QDialog):
@@ -1293,10 +1285,9 @@ class HideableWithDialog(HideableWindow):
 from qtrayico import Systray
 
 class trayIcon(Systray):
-    def __init__(self,window,model,lock):
+    def __init__(self,window,model):
         super(trayIcon,self).__init__(window)
         self._sql = sql.SQLManager()
-        self._writelock = lock
         self._model = model
         
     def createActions(self):
@@ -1466,7 +1457,7 @@ if __name__ == '__main__':
 
     main.setWindowTitle('Alastore')
     main.setWindowIcon(QtGui.QIcon(resource_path("book.ico")))
-    tray = trayIcon(main,model,writelock)
+    tray = trayIcon(main,model)
 
     main.setCentralWidget(treeView)
     main.resize(QtCore.QSize(350,delegate.listPadding[1]+delegate.getHeaderHeight(treeView.fontMetrics())*rootNode.childCount()))
