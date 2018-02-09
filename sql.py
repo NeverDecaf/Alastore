@@ -246,10 +246,13 @@ custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shan
         return set([r['url'] for r in self.cursor.fetchall()])
 ##        return dict((key[0],0) for key in self.cursor.fetchall())
         
-    def removeEpisode(self,torrenturl,blacklist = 1):
+    def removeEpisode(self,torrenturl,blacklist = 1, permablacklist=False):
         ''' removes an episode by torrent url, also blacklists the url so the episode cannot be re-added'''
         self.cursor.execute('''DELETE FROM episode_data WHERE torrent=?''',(torrenturl,))
-        if blacklist:
+        if permablacklist:
+            # this is a hack so we dont have to modify the table def
+            self.cursor.execute('''REPLACE INTO bad_torrents (url,last_update) VALUES (?,9999999999999999)''',(torrenturl,))
+        elif blacklist:
             self.cursor.execute('''REPLACE INTO bad_torrents (url) VALUES (?)''',(torrenturl,))
         self.conn.commit()
 

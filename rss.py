@@ -86,7 +86,7 @@ class RSSReader:
             return episodes
         except urllib.error.URLError as e:
             print(("There was an error in rss.py: %r" % e))
-        except socket.timeout as e:
+        except TimeoutError as e:
             print(("There was an error in rss.py: %r" % e))
         return []
 

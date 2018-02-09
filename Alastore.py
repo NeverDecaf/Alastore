@@ -829,6 +829,191 @@ class FullUpdate(QtCore.QRunnable):
         self._writelock = writelock
         self._signals = WorkerSignals()
 
+
+    def parseRSS(self):
+        user_settings = self._sql.getSettings()
+        rssitems = rss.RSSReader().getFiles(user_settings['RSS Feed']) ## WEB-DEPENDENT ( but handles exceptions itself )
+        with QMutexLocker(self._writelock):
+            newEntries = []
+            torrentBlacklist = self._sql.getTorrentBlacklist()
+            for item in rssitems:
+                if item[2] not in torrentBlacklist:
+                                                                                                #file name, rsstitle,torrent url 
+                    if self._sql.addEpisode(os.path.join(user_settings['Download Directory'],item[1]),item[0],item[2]):
+                        newEntries.append(item)
+            if len(newEntries):
+                self._signals.dataModified.emit()
+            return newEntries
+        return []
+
+
+    def dl_titlelist(self):
+        titleUpdateTime = self._sql.titleUpdateTime()
+        if titleUpdateTime:
+            titleList = None
+            try:
+                titleList = anidb.anidb_title_list() ## WEB-DEPENDENT
+            except (urllib.error.URLError,urllib.error.HTTPError,TimeoutError) as e:
+                'banned or site is down'
+                print('failed to fetch anidb title list. (%r)'%e)
+            if titleList:
+                with QMutexLocker(self._writelock):
+                    self._sql.cacheTitles(titleList)# updates user_settings
+    def hash_files(self):
+        toHash = self._sql.getUnhashed()
+        hasherrors=0
+        for file in toHash:
+            ed2k = None
+            try:
+                ed2k,filesize=anidb.anidbInterface.ed2k_hash(file) ## WEB-DEPENDENT
+            except (urllib.error.URLError,urllib.error.HTTPError,TimeoutError) as e:
+                # if hashing fails on one file, we don't want to exclude the others.
+                hasherrors+=1 # we never do anything with this
+            if ed2k:
+                with QMutexLocker(self._writelock):
+                    self._sql.updateHash(file,ed2k,filesize)
+        return hasherrors
+    
+    def dl_torrents(self, new_episodes):
+        user_settings = self._sql.getSettings()
+        for entry in new_episodes:
+            torrent = torrentprogress.download_torrent(entry[2]) ## WEB-DEPENDENT ( but handles exceptions itself )
+            if torrent:
+                torrentdata=torrent
+                try:
+                    filename = torrentprogress.file_name(io.BytesIO(torrentdata))
+                except torrentprogress.BatchTorrentException as e:
+                    print('initial bencode failed %r'%e)
+                    print('episode (%s) was removed and blacklisted.'%entry[1])
+                    with QMutexLocker(self._writelock):
+                        self._sql.removeEpisode(entry[2],permablacklist=True)
+                    continue
+                except Exception as e:
+                    print('initial bencode failed %r'%e)
+                    print('pre-removing %s.'%entry[1])
+                    with QMutexLocker(self._writelock):
+                        self._sql.removeEpisode(entry[2],len(torrentdata)) # if torrentdata is len(0) don't blacklist
+                    continue
+                path = os.path.join(user_settings['Download Directory'],filename)
+                with QMutexLocker(self._writelock):
+                    self._sql.addTorrentData(path,entry[2],torrentdata,filename)
+        if len(new_episodes):
+            self._signals.dataModified.emit()
+    def anidb_adds(self):
+        with QMutexLocker(self._writelock):
+            user_settings, toAdd = self._sql.getToAdd()
+            
+        self.newAids=[]
+        if user_settings and len(toAdd) and user_settings['anidb Username'] and user_settings['anidb Password']:
+            with closing(anidb.anidbInterface()) as anidbLink: ## WEB-DEPENDENT
+                if anidbLink.open_session(user_settings['anidb Username'],user_settings['anidb Password']):
+                    for datum in toAdd:
+                        aid=anidbLink.add_file(datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add'])
+                        # these match with: status, filepath, aid, subgroup, epnum, ed2k, do_generic_add
+                        logging.debug('anidb add status:%s, vars used: %s\t%s\t%s\t%s\t%s\t%s'%(aid,datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add']))
+                        
+                        if aid:#if the add succeeded.
+                            with QMutexLocker(self._writelock):
+                                self._sql.removeParses((datum['path'],))
+                            if not datum[1] and aid>0: # if an aid did not exist but was returned by add
+                                with QMutexLocker(self._writelock):
+                                    self._sql.updateAids(((aid,datum['id']),)) # we most likely don't need to update data for this...
+
+    def check_file_changes(self):
+        # this is the file update (the part that should run when you pick the context menu option)
+        user_settings = self._sql.getSettings()
+        allseries = self._sql.getDownloadingSeries()
+        dl_dir = user_settings['Download Directory']
+        # we replace space with _ here, make sure to do this to all the strings you want to match.
+        originalFiles = os.listdir(dl_dir)
+        potentialFiles = [re.sub(r'[ ]+',r'_',x) for x in originalFiles]
+        potentialMatches = dict(list(zip(potentialFiles,originalFiles)))
+        for series in list(allseries.values()):
+            for episode in series:
+                pattern,replacement = rss.RSSReader.invalidCharReplacement(user_settings['RSS Feed'])                    
+                workingFile = re.sub(pattern,replacement,episode['file_name'])
+                if workingFile in potentialMatches:
+                    filename = potentialMatches[workingFile]
+                    path=os.path.join(dl_dir,filename)
+                    torrentdata=episode['torrent_data']
+                    percent_downloaded=episode['download_percent']
+                    if not torrentdata:
+                        torrent = torrentprogress.download_torrent(episode['torrent_url'])
+                        if torrent:
+                            torrentdata=torrent
+                    if torrentdata:
+                        try:
+                            percent_downloaded, torrentdata=torrentprogress.percentCompleted(io.BytesIO(torrentdata),path)
+                        except torrentprogress.BatchTorrentException as e:
+                            print('bencode failed %r'%e)
+                            print('episode (%s) was removed and blacklisted.'%episode['display_name'])
+                            with QMutexLocker(self._writelock):
+                                self._sql.removeEpisode(episode['torrent_url'],permablacklist=True)
+                            continue
+                        except Exception as e:
+                            print('bencode failed %r'%e)
+                            print('episode (%s) was removed.'%episode['display_name'])
+                            with QMutexLocker(self._writelock):
+                                self._sql.removeEpisode(episode['torrent_url'],len(torrentdata))
+                            continue
+                    with QMutexLocker(self._writelock):
+                        self._sql.setDownloading(episode['torrent_url'],filename,torrentdata,percent_downloaded)
+##                          self._signals.updateEpisode.emit((episode['id'],episode['torrent_url']))
+        if len(allseries):
+            self._signals.dataModified.emit()
+    def get_series_info(self):
+        wait= time.time()
+        for aid in self._sql.oneDayOldAids():
+            try:
+                while time.time() - wait < 2: pass
+                airdate,imgurl = anidb.anidb_series_info(aid)
+                wait = time.time()
+                SEASONS = ['Spring','Summer','Fall','Winter']
+                date = datetime.datetime.strptime(airdate,'%Y-%m-%d')
+                sixtydays = datetime.timedelta(60)
+                date-=sixtydays
+                dayofyear = int(date.strftime('%j'))
+                dayofseason = datetime.timedelta(dayofyear%91)
+                date -= dayofseason
+                date += sixtydays
+                seasonindex =(dayofyear-(dayofyear%91))//91
+                seasonname= '%s %s'%(SEASONS[seasonindex],date.strftime('%Y'))
+                with QMutexLocker(self._writelock):
+                    self._sql.updateSeriesInfo(((aid,airdate,seasonname,imgurl),))
+            except Exception as e:
+                print('anidb_series_info failed on %s [%r]'%(aid,e))
+                with QMutexLocker(self._writelock):
+                    self._sql.updateSeriesInfoTime((aid,))
+    def dl_poster_icons(self):
+        ''' also sets the icons '''
+        user_settings = self._sql.getSettings()
+        if os.name == 'nt' and user_settings['Poster Icons']: # only works on windows.
+            newIcons = self._sql.getOutdatedPosters()
+            
+            '''hashes the selected files, also downloads poster art if applicable'''
+            for icon in newIcons:
+                folder_title = r''.join(i for i in icon['title'] if i not in r'\/:*?"<>|.')
+                dest_folder = os.path.join(user_settings['Save Directory'],folder_title)
+                if user_settings['Season Sort'] and icon['season']:
+                    year = icon['season'].split()[1]
+                    dest_folder = os.path.join(user_settings['Save Directory'],year,icon['season'],folder_title)
+                try:
+                    if icon['aid'] and os.path.exists(dest_folder) and (not os.path.exists(os.path.join(dest_folder,'%i.ico'%icon['aid'])) or not icon['nochange']):
+                        makeico.makeIcon(icon['aid'],icon['poster_url'],dest_folder)
+                    with QMutexLocker(self._writelock):
+                        self._sql.updateCoverArts(((icon['aid'],icon['poster_url']),))
+                except IOError as e:
+                    if e.errno!=errno.ENOENT:
+                        raise
+                    '''errno 2 is file/directory does not exist.
+                    this simply means you tried to get poster art before any episodes were downloaded.
+                    we will just try to get the art again at a later date'''
+                except Exception as e:
+                    print('failed to download series image for %s [%r]'%(icon['title'],e))
+                finally:
+                    with QMutexLocker(self._writelock):
+                        self._sql.updateCoverArts(((icon['aid'],None),))
+    
     @QtCore.pyqtSlot()
     def run(self):
         '''
@@ -849,189 +1034,34 @@ class FullUpdate(QtCore.QRunnable):
             # download the anidb title list if needed
             # hash all files awaiting hashing
             if not quick:
-                titleUpdateTime = self._sql.titleUpdateTime()
-                if titleUpdateTime:
-                    titleList = None
-                    try:
-                        titleList = anidb.anidb_title_list()
-                    except (urllib.error.URLError,urllib.error.HTTPError) as e:
-                        'banned or site is down'
-                        print('failed to fetch anidb title list. (%r)'%e)
-                    if titleList:
-                        with QMutexLocker(self._writelock):
-                            self._sql.cacheTitles(titleList)
-                        # updates user_settings
-                
-                toHash = self._sql.getUnhashed()
-                hasherrors=0
-    ##            print('hashing',len(toHash),'files')
-                for file in toHash:
-                    ed2k = None
-                    try:
-                        ed2k,filesize=anidb.anidbInterface.ed2k_hash(file)
-                    except:
-                        # if hashing fails on one file, we don't want to exclude the others.
-                        hasherrors+=1 # we never do anything with this var though....
-                    if ed2k:
-                        with QMutexLocker(self._writelock):
-                            self._sql.updateHash(file,ed2k,filesize)
+                self.dl_titlelist()
+                self.hash_files()
 
             # parse your rss feed and add new episodes
-            user_settings = self._sql.getSettings()
-            rssitems = rss.RSSReader().getFiles(user_settings['RSS Feed'])
-            with QMutexLocker(self._writelock):
-                newEntries = []
-                torrentBlacklist = self._sql.getTorrentBlacklist()
-                for item in rssitems:
-                    if item[2] not in torrentBlacklist:
-                                                                                                    #file name, rsstitle,torrent url 
-                        if self._sql.addEpisode(os.path.join(user_settings['Download Directory'],item[1]),item[0],item[2]):
-                            newEntries.append(item)
-                if len(newEntries):
-                    self._signals.dataModified.emit()
+            new_episodes = self.parseRSS()
 
-            # download new torrent files [must do this after the rssitems part]
-            if len(newEntries):
-                user_settings = self._sql.getSettings()
-            for entry in newEntries:
-                torrent = torrentprogress.download_torrent(entry[2])
-                if torrent:
-                    torrentdata=torrent
-                    try:
-                        filename = torrentprogress.file_name(io.BytesIO(torrentdata))
-                    except Exception as e:
-                        print('initial bencode failed %r'%e)
-                        print('pre-removing %s.'%entry[1])
-                        with QMutexLocker(self._writelock):
-                            self._sql.removeEpisode(entry[2],len(torrentdata)) # if torrentdata is len(0) don't blacklist
-                        continue
-                    path = os.path.join(user_settings['Download Directory'],filename)
-                    with QMutexLocker(self._writelock):
-                        self._sql.addTorrentData(path,entry[2],torrentdata,filename)
-            if len(newEntries):
-                self._signals.dataModified.emit()
+            # download new torrent files
+            if len(new_episodes):
+                dl_torrents(new_episodes)
 
-            # anidb adds
             if not quick:
-                with QMutexLocker(self._writelock):
-                    user_settings, toAdd = self._sql.getToAdd()
-                    
-                self.newAids=[]
-                if user_settings and len(toAdd) and user_settings['anidb Username'] and user_settings['anidb Password']:
-                    with closing(anidb.anidbInterface()) as anidbLink:
-                        if anidbLink.open_session(user_settings['anidb Username'],user_settings['anidb Password']):
-                            for datum in toAdd:
-                                aid=anidbLink.add_file(datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add'])
-                                # these match with: status, filepath, aid, subgroup, epnum, ed2k, do_generic_add
-                                logging.debug('anidb add status:%s, vars used: %s\t%s\t%s\t%s\t%s\t%s'%(aid,datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add']))
-                                
-                                if aid:#if the add succeeded.
-                                    with QMutexLocker(self._writelock):
-                                        self._sql.removeParses((datum['path'],))
-                                    if not datum[1] and aid>0: # if an aid did not exist but was returned by add
-                                        with QMutexLocker(self._writelock):
-                                            self._sql.updateAids(((aid,datum['id']),)) # we most likely don't need to update data for this...
+                try:
+                    # add parsed files to anidb, very finnicky so we wrap it in a try
+                    self.anidb_adds()
+                except (ConnectionRefusedError, TimeoutError) as e:
+                    logging.error('AniDB add failed (%r)'%e)
 
                 # attempt to title match one unconfirmed aid
                 with QMutexLocker(self._writelock):
                     self._sql.updateOneUnknownAid()
 
-            # this is the file update (the part that should run when you pick the context menu option)
-            user_settings = self._sql.getSettings()
-            allseries = self._sql.getDownloadingSeries()
-            dl_dir = user_settings['Download Directory']
-            # we replace space with _ here, make sure to do this to all the strings you want to match.
-            originalFiles = os.listdir(dl_dir)
-            potentialFiles = [re.sub(r'[ ]+',r'_',x) for x in originalFiles]
-            potentialMatches = dict(list(zip(potentialFiles,originalFiles)))
-            for series in list(allseries.values()):
-                for episode in series:
-                    pattern,replacement = rss.RSSReader.invalidCharReplacement(user_settings['RSS Feed'])                    
-                    workingFile = re.sub(pattern,replacement,episode['file_name'])
-                    if workingFile in potentialMatches:
-                        filename = potentialMatches[workingFile]
-                        path=os.path.join(dl_dir,filename)
-                        torrentdata=episode['torrent_data']
-                        percent_downloaded=episode['download_percent']
-                        if not torrentdata:
-                            torrent = torrentprogress.download_torrent(episode['torrent_url'])
-                            if torrent:
-                                torrentdata=torrent
-                        if torrentdata:
-                            try:
-                                percent_downloaded, torrentdata=torrentprogress.percentCompleted(io.BytesIO(torrentdata),path)
-                            except torrentprogress.BatchTorrentException as e:
-                                print('bencode failed %r'%e)
-                                print('episode (%s) was removed.'%episode['display_name'])
-                                with QMutexLocker(self._writelock):
-                                    self._sql.removeEpisode(episode['torrent_url'],len(torrentdata))
-                                continue
-                            except Exception as e:
-                                print('bencode failed %r'%e)
-                                print('episode (%s) was removed.'%episode['display_name'])
-                                with QMutexLocker(self._writelock):
-                                    self._sql.removeEpisode(episode['torrent_url'],len(torrentdata))
-                                continue
-                        with QMutexLocker(self._writelock):
-                            self._sql.setDownloading(episode['torrent_url'],filename,torrentdata,percent_downloaded)
-##                          self._signals.updateEpisode.emit((episode['id'],episode['torrent_url']))
-            if len(allseries):
-                self._signals.dataModified.emit()
-            # get series info for new aids
-            # download poster art as well
+            self.check_file_changes()
+            
             if not quick:
-                wait= time.time()
-                for aid in self._sql.oneDayOldAids():
-                    try:
-                        while time.time() - wait < 2: pass
-                        airdate,imgurl = anidb.anidb_series_info(aid)
-                        wait = time.time()
-                        SEASONS = ['Spring','Summer','Fall','Winter']
-                        date = datetime.datetime.strptime(airdate,'%Y-%m-%d')
-                        sixtydays = datetime.timedelta(60)
-                        date-=sixtydays
-                        dayofyear = int(date.strftime('%j'))
-                        dayofseason = datetime.timedelta(dayofyear%91)
-                        date -= dayofseason
-                        date += sixtydays
-                        seasonindex =(dayofyear-(dayofyear%91))//91
-                        seasonname= '%s %s'%(SEASONS[seasonindex],date.strftime('%Y'))
-                        with QMutexLocker(self._writelock):
-                            self._sql.updateSeriesInfo(((aid,airdate,seasonname,imgurl),))
-                    except Exception as e:
-                        print('anidb_series_info failed on %s b/c %r'%(aid,e))
-                        with QMutexLocker(self._writelock):
-                            self._sql.updateSeriesInfoTime((aid,))
-                        
-                user_settings = self._sql.getSettings()
-                if os.name == 'nt' and user_settings['Poster Icons']: # only works on windows.
-                    newIcons = self._sql.getOutdatedPosters()
-                    
-                    '''hashes the selected files, also downloads poster art if applicable'''
-                    for icon in newIcons:
-                        folder_title = r''.join(i for i in icon['title'] if i not in r'\/:*?"<>|.')
-                        dest_folder = os.path.join(user_settings['Save Directory'],folder_title)
-                        if user_settings['Season Sort'] and icon['season']:
-                            year = icon['season'].split()[1]
-                            dest_folder = os.path.join(user_settings['Save Directory'],year,icon['season'],folder_title)
-                        try:
-                            try:
-                                if icon['aid'] and os.path.exists(dest_folder) and (not os.path.exists(os.path.join(dest_folder,'%i.ico'%icon['aid'])) or not icon['nochange']):
-                                    makeico.makeIcon(icon['aid'],icon['poster_url'],dest_folder)
-                                with QMutexLocker(self._writelock):
-                                    self._sql.updateCoverArts(((icon['aid'],icon['poster_url']),))
-                            except IOError as e:
-                                if e.errno!=errno.ENOENT:
-                                    raise
-                                else:
-                                    '''errno 2 is file/directory does not exist.
-                                    this simply means you tried to get poster art before any episodes were downloaded.
-                                    we will just try to get the art again at a later date'''
-                        except Exception as e:
-                            print('failed to download series image for %s b/c %r'%(icon['title'],e))
-                        finally:
-                            with QMutexLocker(self._writelock):
-                                self._sql.updateCoverArts(((icon['aid'],None),))
+                # get anidb info for new series
+                self.get_series_info()
+                # set poster icons
+                self.dl_poster_icons()
             self._signals.finished.emit()
 
 class SettingsDialog(QtWidgets.QDialog):
@@ -1403,7 +1433,6 @@ if __name__ == '__main__':
 ##    app.setStyle("plastique")
     
     rootNode   = Node({})
-    #fill this root node with more sensible nonsense
 
     threadpool = QtCore.QThreadPool()
     writelock = QtCore.QMutex()
