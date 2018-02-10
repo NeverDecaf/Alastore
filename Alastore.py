@@ -193,12 +193,13 @@ class HeaderNode(Node):
     
 class TreeModel(QtCore.QAbstractItemModel):
     """INPUTS: Node, QObject"""
-    def __init__(self, root, lock, threadpool, parent=None):
+    def __init__(self, root, writelock, updatelock, threadpool, parent=None):
         super(TreeModel, self).__init__(parent)
         self._rootNode = root
         self._sqlManager = sql.SQLManager()
         self._updateData()
-        self._writelock = lock
+        self._writelock = writelock
+        self._updatelock = updatelock
         self._threadpool = threadpool
         self._shanalink = ShanaLink()
 
@@ -442,7 +443,7 @@ You should only use this option if a file fails to download or is moved/deleted 
         d.deleteLater()
 
     def quickUpdate(self):
-        fileupdate = FullUpdate(self._writelock,quick=True)
+        fileupdate = FullUpdate(self._writelock,self._updatelock,quick=True)
         fileupdate._signals.dataModified.connect(self.sqlDataChanged)
         fileupdate._signals.updateEpisode.connect(self.updateEpisode)
         self._threadpool.start(fileupdate)
@@ -822,31 +823,14 @@ class FullUpdate(QtCore.QRunnable):
     '''
     Worker thread
     '''
-    def __init__(self, writelock, quick=False):
+    def __init__(self, writelock, updatelock, quick=False):
         super(FullUpdate, self).__init__()
 ##        self._conn=conn
         self._quick=quick
         self._writelock = writelock
+        self._updatelock = updatelock
         self._signals = WorkerSignals()
-
-
-    def parseRSS(self):
-        user_settings = self._sql.getSettings()
-        rssitems = rss.RSSReader().getFiles(user_settings['RSS Feed']) ## WEB-DEPENDENT ( but handles exceptions itself )
-        with QMutexLocker(self._writelock):
-            newEntries = []
-            torrentBlacklist = self._sql.getTorrentBlacklist()
-            for item in rssitems:
-                if item[2] not in torrentBlacklist:
-                                                                                                #file name, rsstitle,torrent url 
-                    if self._sql.addEpisode(os.path.join(user_settings['Download Directory'],item[1]),item[0],item[2]):
-                        newEntries.append(item)
-            if len(newEntries):
-                self._signals.dataModified.emit()
-            return newEntries
-        return []
-
-
+        
     def dl_titlelist(self):
         titleUpdateTime = self._sql.titleUpdateTime()
         if titleUpdateTime:
@@ -873,32 +857,37 @@ class FullUpdate(QtCore.QRunnable):
                 with QMutexLocker(self._writelock):
                     self._sql.updateHash(file,ed2k,filesize)
         return hasherrors
-    
-    def dl_torrents(self, new_episodes):
+
+    def get_new_from_rss(self):
+        '''parse your rss and find new files; for each file download the torrent file'''
         user_settings = self._sql.getSettings()
-        for entry in new_episodes:
-            torrent = torrentprogress.download_torrent(entry[2]) ## WEB-DEPENDENT ( but handles exceptions itself )
-            if torrent:
-                torrentdata=torrent
-                try:
-                    filename = torrentprogress.file_name(io.BytesIO(torrentdata))
-                except torrentprogress.BatchTorrentException as e:
-                    print('initial bencode failed %r'%e)
-                    print('episode (%s) was removed and blacklisted.'%entry[1])
-                    with QMutexLocker(self._writelock):
-                        self._sql.removeEpisode(entry[2],permablacklist=True)
-                    continue
-                except Exception as e:
-                    print('initial bencode failed %r'%e)
-                    print('pre-removing %s.'%entry[1])
-                    with QMutexLocker(self._writelock):
-                        self._sql.removeEpisode(entry[2],len(torrentdata)) # if torrentdata is len(0) don't blacklist
-                    continue
-                path = os.path.join(user_settings['Download Directory'],filename)
-                with QMutexLocker(self._writelock):
-                    self._sql.addTorrentData(path,entry[2],torrentdata,filename)
-        if len(new_episodes):
-            self._signals.dataModified.emit()
+        rssitems = rss.RSSReader().getFiles(user_settings['RSS Feed']) ## WEB-DEPENDENT ( but handles exceptions itself )
+        with QMutexLocker(self._writelock):
+            torrentBlacklist = self._sql.getTorrentBlacklist()
+            for item in rssitems:
+                if item[2] not in torrentBlacklist:
+                                                                                                #file name, rsstitle,torrent url 
+                    if self._sql.addEpisode(os.path.join(user_settings['Download Directory'],item[1]),item[0],item[2]):
+                        torrentdata = torrentprogress.download_torrent(item[2]) ## WEB-DEPENDENT ( but handles exceptions itself )
+                        if torrentdata:
+                            try:
+                                filename = torrentprogress.file_name(io.BytesIO(torrentdata))
+                            except torrentprogress.BatchTorrentException as e:
+                                print('initial bencode failed %r'%e)
+                                print('episode (%s) was removed and blacklisted.'%item[1])
+                                with QMutexLocker(self._writelock):
+                                    self._sql.removeEpisode(item[2],permablacklist=True)
+                            except Exception as e:
+                                print('initial bencode failed %r'%e)
+                                print('pre-removing %s.'%item[1])
+                                with QMutexLocker(self._writelock):
+                                    self._sql.removeEpisode(item[2],len(torrentdata)) # if torrentdata is len(0) don't blacklist <== this state is impossible to reach
+                            else:
+                                path = os.path.join(user_settings['Download Directory'],filename)
+                                with QMutexLocker(self._writelock):
+                                    self._sql.addTorrentData(path,item[2],torrentdata,filename)
+                                self._signals.dataModified.emit()
+
     def anidb_adds(self):
         with QMutexLocker(self._writelock):
             user_settings, toAdd = self._sql.getToAdd()
@@ -914,8 +903,8 @@ class FullUpdate(QtCore.QRunnable):
                         
                         if aid:#if the add succeeded.
                             with QMutexLocker(self._writelock):
-                                self._sql.removeParses((datum['path'],))
-                            if not datum[1] and aid>0: # if an aid did not exist but was returned by add
+                                self._sql.removeParsed(datum['path'],forceadded=datum['force_generic_add'],aid=datum['aid'])
+                            if not datum['aid'] and aid>0: # if an aid did not exist but was returned by add
                                 with QMutexLocker(self._writelock):
                                     self._sql.updateAids(((aid,datum['id']),)) # we most likely don't need to update data for this...
 
@@ -956,8 +945,8 @@ class FullUpdate(QtCore.QRunnable):
                             with QMutexLocker(self._writelock):
                                 self._sql.removeEpisode(episode['torrent_url'],len(torrentdata))
                             continue
-                    with QMutexLocker(self._writelock):
-                        self._sql.setDownloading(episode['torrent_url'],filename,torrentdata,percent_downloaded)
+                        with QMutexLocker(self._writelock):
+                            self._sql.setDownloading(episode['torrent_url'],filename,torrentdata,percent_downloaded)
 ##                          self._signals.updateEpisode.emit((episode['id'],episode['torrent_url']))
         if len(allseries):
             self._signals.dataModified.emit()
@@ -1019,50 +1008,48 @@ class FullUpdate(QtCore.QRunnable):
         '''
         Your code goes in this function
         '''
-        with closing(sql.SQLManager()) as self._sql:
-            quick = self._quick
-            if not self._sql.getSettings():
-                self._signals.finished.emit()
-                return
-            # do some bookkeeping
-            with QMutexLocker(self._writelock):
-                changes = self._sql.hideOldSeries()
-                if changes:
-                    self._signals.dataModified.emit()
-            
-            # some time consuming stuff:
-            # download the anidb title list if needed
-            # hash all files awaiting hashing
-            if not quick:
-                self.dl_titlelist()
-                self.hash_files()
-
-            # parse your rss feed and add new episodes
-            new_episodes = self.parseRSS()
-
-            # download new torrent files
-            if len(new_episodes):
-                dl_torrents(new_episodes)
-
-            if not quick:
-                try:
-                    # add parsed files to anidb, very finnicky so we wrap it in a try
-                    self.anidb_adds()
-                except (ConnectionRefusedError, TimeoutError) as e:
-                    logging.error('AniDB add failed (%r)'%e)
-
-                # attempt to title match one unconfirmed aid
+        with QMutexLocker(self._updatelock):
+            with closing(sql.SQLManager()) as self._sql:
+                quick = self._quick
+                if not self._sql.getSettings():
+                    self._signals.finished.emit()
+                    return
+                # do some bookkeeping
                 with QMutexLocker(self._writelock):
-                    self._sql.updateOneUnknownAid()
+                    changes = self._sql.hideOldSeries()
+                    if changes:
+                        self._signals.dataModified.emit()
+                
+                # some time consuming stuff:
+                # download the anidb title list if needed
+                # hash all files awaiting hashing
+                if not quick:
+                    self.dl_titlelist()
+                    self.hash_files()
 
-            self.check_file_changes()
-            
-            if not quick:
-                # get anidb info for new series
-                self.get_series_info()
-                # set poster icons
-                self.dl_poster_icons()
-            self._signals.finished.emit()
+                # get new files from rss and also download the torrents
+                self.get_new_from_rss()
+
+                if not quick:
+                    try:
+                        # add parsed files to anidb, very finnicky so we wrap it in a try
+                        self.anidb_adds()
+                    except (ConnectionRefusedError, TimeoutError) as e:
+                        logging.error('AniDB add failed (%r)'%e)
+
+                    # attempt to title match one unconfirmed aid
+                    with QMutexLocker(self._writelock):
+                        self._sql.updateOneUnknownAid()
+
+                # check for downloaded files
+                self.check_file_changes()
+                
+                if not quick:
+                    # get anidb info for new series
+                    self.get_series_info()
+                    # set poster icons
+                    self.dl_poster_icons()
+                self._signals.finished.emit()
 
 class SettingsDialog(QtWidgets.QDialog):
     def __init__(self,initialSettings, parent=None):
@@ -1436,9 +1423,10 @@ if __name__ == '__main__':
 
     threadpool = QtCore.QThreadPool()
     writelock = QtCore.QMutex()
+    updatelock = QtCore.QMutex()
 
     treeView = TreeView()
-    model = TreeModel(rootNode,writelock,threadpool)
+    model = TreeModel(rootNode,writelock,updatelock,threadpool)
     delegate = ItemDelegate()
     
     
@@ -1455,11 +1443,11 @@ if __name__ == '__main__':
     model.sort(0)
 ##    treeView.show()
 
-    fileupdate = FullUpdate(writelock,quick=True)
+    fileupdate = FullUpdate(writelock,updatelock,quick=True)
     fileupdate._signals.dataModified.connect(model.sqlDataChanged)
     fileupdate._signals.updateEpisode.connect(model.updateEpisode)
 
-    fullupdate = FullUpdate(writelock)
+    fullupdate = FullUpdate(writelock,updatelock)
     fullupdate._signals.dataModified.connect(model.sqlDataChanged)
     fullupdate._signals.updateEpisode.connect(model.updateEpisode)
 

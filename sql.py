@@ -86,8 +86,13 @@ class SQLManager:
                  (id integer PRIMARY KEY AUTOINCREMENT, title text, aid integer DEFAULT NULL, cover_art integer DEFAULT 0,
                  hidden integer DEFAULT 0, airdate text, season text, poster_url text, series_info integer DEFAULT 0,
                  last_poster_url text DEFAULT NULL, last_update integer DEFAULT (strftime('%s', 'now')), verified_aid integer DEFAULT 0, aid_update integer DEFAULT 0)''')
+
+        # these must have the same structure with the addition of aid to anidb_force_added
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS parse_data
                  (path text PRIMARY KEY, ed2k text, filesize integer, id integer, episode integer, subgroup text, added_on integer DEFAULT (strftime('%s', 'now')), last_add_attempt integer DEFAULT (strftime('%s', 'now')))''')
+        self.cursor.execute('''CREATE TABLE IF NOT EXISTS anidb_force_added
+                 (path text PRIMARY KEY, ed2k text, filesize integer, id integer, episode integer, subgroup text, added_on integer DEFAULT (strftime('%s', 'now')), last_add_attempt integer DEFAULT (strftime('%s', 'now')), aid integer)''')
+        
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS episode_data
                  (id integer, file_name text, episode integer, path text, display_name text, watched integer DEFAULT 0,downloaded integer DEFAULT 0,
                  subgroup text, torrent text PRIMARY KEY, torrent_data BLOB DEFAULT NULL, download_percent integer DEFAULT 0)''')
@@ -224,18 +229,18 @@ custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shan
             lid=lid['id']
         try:
             self.cursor.execute('''INSERT INTO episode_data (id,file_name,episode,path,display_name,watched,subgroup,torrent) VALUES (?,?,?,?,?,?,?,?)''',
-                                                            (lid,file_name,episode,path,display_name,watched,subgroup,torrenturl))
-            self.conn.commit()
+                                                            (lid,file_name,episode,path,display_name,watched,subgroup,torrenturl))#downloaded,torrent_data,download_percent omitted
         except sqlite3.IntegrityError as msg:
             self.conn.commit()
             'means it already exists'
             'why didnt we just use replace here i dont know but too afraid to change it now.'
             'could be because we dont want to replace something we already edited (in an exisitng series) like the path or w/e'
             return 0
-        #Since we got a new episode, unhide the series.
-        self.cursor.execute('''UPDATE shana_series SET hidden=0,last_update=strftime('%s', 'now') WHERE id=?''',(lid,))
-        self.conn.commit()
-        return 1
+        else:
+            #Since we got a new episode, unhide the series.
+            self.cursor.execute('''UPDATE shana_series SET hidden=0,last_update=strftime('%s', 'now') WHERE id=?''',(lid,))
+            self.conn.commit()
+            return 1
 
     def getTorrentBlacklist(self):
         ' returns a set() of blacklisted torrents where each key is a url'
@@ -353,7 +358,7 @@ SELECT aid FROM (
     therefore you will have to modify that method to always update aids'''
     # some clarification: an add attempt is made based on the last add attempt. the formula is: gap since last add = number of days since file was added /2  in hours.
     # in other words, a file that was hashed 200 days ago will wait 400 hours between successive anidb add attempts.
-    # min is equiv to one day (so min of 2 hr between adds)
+    # min is equiv to 2 days (so min of 4 hr between adds)
 
     # there is now a "force_generic_add" logic in place:
     # if a series has not been aid_verified for LAST_UPDATE_TIME since the series ended
@@ -370,17 +375,18 @@ SELECT aid FROM (
         self.cursor.execute('''SELECT path,
 CASE WHEN verified_aid=0 AND last_update>strftime('%s', 'now')-? THEN NULL
 ELSE aid END AS aid
-,subgroup AS `group`,episode AS epno,ed2k,parse_data.id AS id,added_on<strftime('%s', 'now')-? as do_generic_add
-                                FROM parse_data JOIN shana_series WHERE shana_series.id=parse_data.id AND ed2k NOT NULL AND strftime('%s', 'now') - 2*3600*((strftime('%s', 'now')-added_on)/86400+1) > last_add_attempt''', (LAST_UPDATE_TIME,ANIDB_WAIT_TIME))
-        result = self.cursor.fetchall()
+,subgroup AS `group`,episode AS epno,ed2k,parse_data.id AS id,added_on<strftime('%s', 'now')-? as do_generic_add, verified_aid=0 AND last_update<strftime('%s', 'now')-? AS force_generic_add
+                                FROM parse_data JOIN shana_series WHERE shana_series.id=parse_data.id AND ed2k NOT NULL AND strftime('%s', 'now') - 2*3600*((strftime('%s', 'now')-added_on)/86400+2) > last_add_attempt''', (LAST_UPDATE_TIME,ANIDB_WAIT_TIME,LAST_UPDATE_TIME))
+        result = self.cursor.fetchall()       
         for file in result:
             self.cursor.execute('''UPDATE parse_data SET last_add_attempt=strftime('%s', 'now') WHERE ed2k=?''',(file['ed2k'],)) # go back in and updated the last_add_attempt of everything we are adding
         self.conn.commit()
         return settings,result
     
-    def removeParses(self,parsed):
-        for path in parsed:
-            self.cursor.execute('''DELETE FROM parse_data WHERE path=?''',(path,))
+    def removeParsed(self,path,forceadded = False, aid=None):
+        if forceadded:
+            self.cursor.execute('''INSERT INTO anidb_force_added SELECT *,aid FROM parse_data WHERE path=?''',(aid,path))
+        self.cursor.execute('''DELETE FROM parse_data WHERE path=?''',(path,))
         self.conn.commit()
 
     def updateAids(self,aids):
