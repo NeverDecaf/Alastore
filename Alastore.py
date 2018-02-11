@@ -864,29 +864,29 @@ class FullUpdate(QtCore.QRunnable):
         rssitems = rss.RSSReader().getFiles(user_settings['RSS Feed']) ## WEB-DEPENDENT ( but handles exceptions itself )
         with QMutexLocker(self._writelock):
             torrentBlacklist = self._sql.getTorrentBlacklist()
-            for item in rssitems:
-                if item[2] not in torrentBlacklist:
-                                                                                                #file name, rsstitle,torrent url 
-                    if self._sql.addEpisode(os.path.join(user_settings['Download Directory'],item[1]),item[0],item[2]):
-                        torrentdata = torrentprogress.download_torrent(item[2]) ## WEB-DEPENDENT ( but handles exceptions itself )
-                        if torrentdata:
-                            try:
-                                filename = torrentprogress.file_name(io.BytesIO(torrentdata))
-                            except torrentprogress.BatchTorrentException as e:
-                                print('initial bencode failed %r'%e)
-                                print('episode (%s) was removed and blacklisted.'%item[1])
-                                with QMutexLocker(self._writelock):
-                                    self._sql.removeEpisode(item[2],permablacklist=True)
-                            except Exception as e:
-                                print('initial bencode failed %r'%e)
-                                print('pre-removing %s.'%item[1])
-                                with QMutexLocker(self._writelock):
-                                    self._sql.removeEpisode(item[2],len(torrentdata)) # if torrentdata is len(0) don't blacklist <== this state is impossible to reach
-                            else:
-                                path = os.path.join(user_settings['Download Directory'],filename)
-                                with QMutexLocker(self._writelock):
-                                    self._sql.addTorrentData(path,item[2],torrentdata,filename)
-                                self._signals.dataModified.emit()
+        for item in rssitems:
+            if item[2] not in torrentBlacklist:
+                                                                                            #file name, rsstitle,torrent url 
+                if self._sql.addEpisode(os.path.join(user_settings['Download Directory'],item[1]),item[0],item[2]):
+                    torrentdata = torrentprogress.download_torrent(item[2]) ## WEB-DEPENDENT ( but handles exceptions itself )
+                    if torrentdata:
+                        try:
+                            filename = torrentprogress.file_name(io.BytesIO(torrentdata))
+                        except torrentprogress.BatchTorrentException as e:
+                            print('initial bencode failed %r'%e)
+                            print('episode (%s) was removed and blacklisted.'%item[1])
+                            with QMutexLocker(self._writelock):
+                                self._sql.removeEpisode(item[2],permablacklist=True)
+                        except Exception as e:
+                            print('initial bencode failed %r'%e)
+                            print('pre-removing %s.'%item[1])
+                            with QMutexLocker(self._writelock):
+                                self._sql.removeEpisode(item[2],len(torrentdata)) # if torrentdata is len(0) don't blacklist <== this state is impossible to reach
+                        else:
+                            path = os.path.join(user_settings['Download Directory'],filename)
+                            with QMutexLocker(self._writelock):
+                                self._sql.addTorrentData(path,item[2],torrentdata,filename)
+                            self._signals.dataModified.emit()
 
     def anidb_adds(self):
         with QMutexLocker(self._writelock):
