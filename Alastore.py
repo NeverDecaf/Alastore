@@ -371,10 +371,12 @@ You should only use this option if a file fails to download or is moved/deleted 
                     self._sqlManager.forceWatched(torrenturl = index.internalPointer().torrent_url())
                 finally:
                     self._writelock.unlock()
-                self.updateEpisodeByIndex(index)
+                self.sqlDataChanged()
+##                self.updateEpisodeByIndex(index)
             else:
                 t = SQLSingleFunction(self._writelock,'forceWatched',torrenturl = index.internalPointer().torrent_url())
-                t._signals.finished.connect(lambda: self.updateEpisodeByIndex(index))
+##                t._signals.finished.connect(lambda: self.updateEpisodeByIndex(index)) # idk this func has issues.
+                t._signals.finished.connect(self.sqlDataChanged)
                 self._threadpool.start(t)
                 
     def dropSeries(self,index,parent):
