@@ -310,6 +310,8 @@ class TreeModel(QtCore.QAbstractItemModel):
     def getContextOptions(self,isheader):
         opt = []
         opt.append((self.tr("&Hide Series"),self.hideSeries))
+        if os.name=='nt':
+            opt.append((self.tr("&Show in Explorer"),self.openInFileExplorer))
         opt.append((self.tr("&Mark All Watched"),self.markSeriesWatched))
 ##        if not isheader:
         opt.append((self.tr("&Mark Episode Watched"),self.markEpisodeWatched))
@@ -317,6 +319,15 @@ class TreeModel(QtCore.QAbstractItemModel):
         if user_settings['Shana Project Username'] and user_settings['Shana Project Password']:
             opt.append((self.tr("&Drop Series"),self.dropSeries))
         return opt
+
+    def openInFileExplorer(self,index,parent):
+        import ctypes
+        ctypes.windll.ole32.CoInitialize(None)
+        upath = index.internalPointer().path()
+        pidl = ctypes.windll.shell32.ILCreateFromPathW(upath)
+        ctypes.windll.shell32.SHOpenFolderAndSelectItems(pidl, 0, None, 0)
+        ctypes.windll.shell32.ILFree(pidl)
+        ctypes.windll.ole32.CoUninitialize()
         
     def hideSeries(self,index,parent):
         if QtWidgets.QMessageBox.Yes == QtWidgets.QMessageBox.warning(
@@ -1010,48 +1021,54 @@ class FullUpdate(QtCore.QRunnable):
         '''
         Your code goes in this function
         '''
-        with QMutexLocker(self._updatelock):
-            with closing(sql.SQLManager()) as self._sql:
-                quick = self._quick
-                if not self._sql.getSettings():
-                    self._signals.finished.emit()
-                    return
-                # do some bookkeeping
-                with QMutexLocker(self._writelock):
-                    changes = self._sql.hideOldSeries()
-                    if changes:
-                        self._signals.dataModified.emit()
-                
-                # some time consuming stuff:
-                # download the anidb title list if needed
-                # hash all files awaiting hashing
-                if not quick:
-                    self.dl_titlelist()
-                    self.hash_files()
-
-                # get new files from rss and also download the torrents
-                self.get_new_from_rss()
-
-                if not quick:
-                    try:
-                        # add parsed files to anidb, very finnicky so we wrap it in a try
-                        self.anidb_adds()
-                    except (ConnectionRefusedError, TimeoutError) as e:
-                        logging.error('AniDB add failed (%r)'%e)
-
-                    # attempt to title match one unconfirmed aid
+        try:
+            with QMutexLocker(self._updatelock):
+                with closing(sql.SQLManager()) as self._sql:
+                    quick = self._quick
+                    if not self._sql.getSettings():
+                        self._signals.finished.emit()
+                        return
+                    # do some bookkeeping
                     with QMutexLocker(self._writelock):
-                        self._sql.updateOneUnknownAid()
+                        changes = self._sql.hideOldSeries()
+                        if changes:
+                            self._signals.dataModified.emit()
+                    
+                    # some time consuming stuff:
+                    # download the anidb title list if needed
+                    # hash all files awaiting hashing
+                    if not quick:
+                        self.dl_titlelist()
+                        self.hash_files()
 
-                # check for downloaded files
-                self.check_file_changes()
-                
-                if not quick:
-                    # get anidb info for new series
-                    self.get_series_info()
-                    # set poster icons
-                    self.dl_poster_icons()
-                self._signals.finished.emit()
+                    # get new files from rss and also download the torrents
+                    self.get_new_from_rss()
+
+                    if not quick:
+                        try:
+                            # add parsed files to anidb, very finnicky so we wrap it in a try
+                            self.anidb_adds()
+                        except (ConnectionRefusedError, TimeoutError) as e:
+                            logging.error('AniDB add failed (%r)'%e)
+
+                        # attempt to title match one unconfirmed aid
+                        with QMutexLocker(self._writelock):
+                            self._sql.updateOneUnknownAid()
+
+                    # check for downloaded files
+                    self.check_file_changes()
+                    
+                    if not quick:
+                        # get anidb info for new series
+                        self.get_series_info()
+                        # set poster icons
+                        self.dl_poster_icons()
+                    self._signals.finished.emit()
+        except Exception as e:
+            import traceback
+            logging.error(str(e))
+            logging.error(traceback.format_exc())
+            self._signals.finishedWithErrors.emit()
 
 class SettingsDialog(QtWidgets.QDialog):
     def __init__(self,initialSettings, parent=None):
@@ -1415,7 +1432,7 @@ if __name__ == '__main__':
     else:
         logging.basicConfig(level=logging.DEBUG, stream=io.BytesIO())
         logging.disable(logging.DEBUG)
-        
+
     with closing(sql.SQLManager(createtables = True)) as s:pass
     
     app = QtWidgets.QApplication(sys.argv)
