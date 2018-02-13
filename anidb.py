@@ -343,6 +343,8 @@ class anidbInterface:
     ##############
     def _logout(self):
         '''Log out of mylist'''
+        if not self.SK:
+            return None
         data = 'LOGOUT s='+self.SK
         self.SK=None
         self.socket.sendall(data.encode('utf8'))
