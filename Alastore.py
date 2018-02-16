@@ -1455,7 +1455,7 @@ if __name__ == '__main__':
     treeView.setItemDelegate(delegate)
     treeView.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
     treeView.doubleClicked.connect(model.dblClickEvent)
-    treeView.resize(QtCore.QSize(350,delegate.listPadding[1]+delegate.getHeaderHeight(treeView.fontMetrics())*rootNode.childCount()))
+##    treeView.resize(QtCore.QSize(350,delegate.listPadding[1]*2+delegate.getHeaderHeight(treeView.fontMetrics())*rootNode.childCount()))
     treeView.setIndentation(delegate.getHeaderHeight(treeView.fontMetrics()))
     treeView.setModel(model)
     
@@ -1488,7 +1488,7 @@ if __name__ == '__main__':
     tray = trayIcon(main,model)
 
     main.setCentralWidget(treeView)
-    main.resize(QtCore.QSize(350,delegate.listPadding[1]+delegate.getHeaderHeight(treeView.fontMetrics())*rootNode.childCount()))
+    main.resize(QtCore.QSize(350,delegate.listPadding[1]*2+delegate.getHeaderHeight(treeView.fontMetrics())*rootNode.childCount()))
 ##    main.move(QtCore.QPoint(main.pos().x(),0))
     if '-q' not in sys.argv and '/q' not in sys.argv and '/silent' not in sys.argv:
         main.show()
