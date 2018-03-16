@@ -1422,10 +1422,10 @@ ul { margin: 0; padding: 0; }
 
     def refresh(self):
         self._model.quickUpdate()
-        
+
     def showConfig(self):
         self._model.configDialog(self.main_window)
-        
+
 if __name__ == '__main__':
     if os.path.exists('DEBUG_TEST'):
         logging.basicConfig(level=logging.DEBUG, filename='DEBUG.log')
@@ -1479,7 +1479,6 @@ if __name__ == '__main__':
 ##    QtCore.QTimer.singleShot(2000,lambda: threadpool.start(fullupdate))
 
     QtCore.QTimer.singleShot(INITIALUPDATE_GRACEPERIOD,lambda: threadpool.start(fileupdate))
-    
 
     main = HideableWithDialog(model)#QtWidgets.QMainWindow()
 
@@ -1493,5 +1492,5 @@ if __name__ == '__main__':
     if '-q' not in sys.argv and '/q' not in sys.argv and '/silent' not in sys.argv:
         main.show()
     app.setQuitOnLastWindowClosed(False)
-    
+
     sys.exit(app.exec_())

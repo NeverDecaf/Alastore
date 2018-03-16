@@ -390,7 +390,7 @@ ELSE aid END AS aid
     
     def removeParsed(self,path,forceadded = False, aid=None):
         if forceadded:
-            self.cursor.execute('''INSERT INTO anidb_force_added SELECT *,aid FROM parse_data WHERE path=?''',(aid,path))
+            self.cursor.execute('''INSERT INTO anidb_force_added SELECT *,? FROM parse_data WHERE path=?''',(aid,path))
         self.cursor.execute('''DELETE FROM parse_data WHERE path=?''',(path,))
         self.conn.commit()
 
