@@ -19,6 +19,8 @@ import logging
 from contextlib import closing
 from functools import partial
 from shana_interface import ShanaLink
+from functools import reduce
+import stat
 FULLUPDATE_TIME = 1000 * 60 * 10 #once every 10 m
 INITIALUPDATE_GRACEPERIOD = 1000 * 60 * 2 # 2m (this is time before the first (only) quick update)
 COLORSCHEME = {'background': QtGui.QColor(255,255,255),#
@@ -293,17 +295,17 @@ class TreeModel(QtCore.QAbstractItemModel):
 
     # BE VERY CAREFUL WITH THIS.
     @staticmethod
-    def cleanFolder(self,path):
+    def cleanFolder(path):
         if os.path.isdir(path):
             files = os.listdir(path)
             if len(files)<=2:
-                isEmpty = not reduce(lambda x,y: x or not (y.endswith('.ico') or y=='Desktop.ini'), [0]+files)
+                isEmpty = not reduce(lambda x,y: x or not (y.endswith('.ico') or y.lower()=='desktop.ini'), [0]+files)
                 if isEmpty:
                     shutil.rmtree(path, onerror=TreeModel.remove_readonly)
-                
+
     # AND EVEN MORE CAREFUL WITH THIS
     @staticmethod
-    def remove_readonly(self, func, path, excinfo):
+    def remove_readonly(func, path, excinfo):
         os.chmod(path, stat.S_IWRITE)
         func(path)
         
@@ -418,9 +420,9 @@ You should only use this option if a file fails to download or is moved/deleted 
                         if delete:
                             paths = _sql.getAllPaths(id)
                             for path in paths:
-                                directory = os.path.dirname(path[0])
-                                if os.path.isfile(path[0]):
-                                    os.remove(path[0])
+                                directory = os.path.dirname(path)
+                                if os.path.isfile(path):
+                                    os.remove(path)
                                 TreeModel.cleanFolder(directory)
                             _sql.dropSeries(id)
                     

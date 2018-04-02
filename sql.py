@@ -294,7 +294,7 @@ SELECT aid FROM (
 
     def getAllPaths(self,id):
         '''gets a list of paths for all files/episodes for series with given id'''
-        self.cursor.execute('''SELECT path from episode_data JOIN shana_series WHERE shana_series.id=episode_data.id AND id=? AND downloaded=1''',(id,))
+        self.cursor.execute('''SELECT path from episode_data JOIN shana_series WHERE shana_series.id=episode_data.id AND shana_series.id=? AND downloaded=1''',(id,))
         return set([r['path'] for r in self.cursor.fetchall()])
         
     def changePath(self,oldPath,newPath):
