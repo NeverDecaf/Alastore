@@ -1438,7 +1438,7 @@ if __name__ == '__main__':
     with closing(sql.SQLManager(createtables = True)) as s:pass
     
     app = QtWidgets.QApplication(sys.argv)
-##    app.setStyle("plastique")
+##    app.setStyle('Plastique')
     
     rootNode   = Node({})
 

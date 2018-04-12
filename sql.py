@@ -337,7 +337,7 @@ SELECT aid FROM (
                                     OR
                                     (last_update<strftime('%s', 'now')-? AND (SELECT MAX(episode) FROM episode_data WHERE shana_series.id=episode_data.id)>7)
                                     )
-                                AND (SELECT 1 FROM episode_data WHERE shana_series.id=episode_data.id and watched=0 LIMIT 1)''',(LAST_UPDATE_TIME * 2, LAST_UPDATE_TIME))
+                                AND (SELECT MIN(watched) FROM episode_data WHERE shana_series.id=episode_data.id)''',(LAST_UPDATE_TIME * 2, LAST_UPDATE_TIME))
         self.conn.commit()
         return self.cursor.rowcount
 
