@@ -223,7 +223,7 @@ class TreeModel(QtCore.QAbstractItemModel):
                     n=Node(ep,head)
                 head.update()
         
-    def playandsort(self, index):
+    def playandsort(self, index, parent=None, syncplayPath=None):
         if index.internalPointer().downloaded()>0:
             user_settings = self._sqlManager.getSettings()
             if not user_settings['Save Directory']:
@@ -233,7 +233,10 @@ class TreeModel(QtCore.QAbstractItemModel):
             else:
                 'play the file in a separate thread to prevent ui lag.'
                 if index.internalPointer().watched():
-                    self.watchfile(index.internalPointer().path())
+                    if syncplayPath:
+                        subprocess.Popen((os.path.join(syncplayPath,'Syncplay.exe'),index.internalPointer().path()))
+                    else:
+                        self.watchfile(index.internalPointer().path())
                 else:
                     t = SingleFunction(lambda:playmove(user_settings,index),self._writelock)
                     t._signals.finished.connect(self.sqlDataChanged)
@@ -280,7 +283,10 @@ class TreeModel(QtCore.QAbstractItemModel):
                             os.makedirs(dest_folder)
                         if not os.path.exists(dest_file):
                             shutil.move(index.internalPointer().path(),dest_file)#.decode('utf8'),dest_file)
-                        self.watchfile(dest_file)
+                        if syncplayPath:
+                            subprocess.Popen((os.path.join(syncplayPath,'Syncplay.exe'),dest_file))
+                        else:
+                            self.watchfile(dest_file)
                         # we also want to get the ed2k hash asap in case you decide to drop the series right after watching an episode.
                         try:
                             ed2k,filesize=None,None
@@ -311,15 +317,21 @@ class TreeModel(QtCore.QAbstractItemModel):
         
     def getContextOptions(self,isheader):
         opt = []
-        opt.append((self.tr("&Hide Series"),self.hideSeries))
+        opt.append((self.tr("&Hide Series"),self.hideSeries,{}))
         if os.name=='nt':
-            opt.append((self.tr("&Show in Explorer"),self.openInFileExplorer))
-        opt.append((self.tr("&Mark All Watched"),self.markSeriesWatched))
+            opt.append((self.tr("&Show in Explorer"),self.openInFileExplorer,{}))
+            from winreg import OpenKey,QueryValueEx,HKEY_LOCAL_MACHINE
+            try:
+                with OpenKey(HKEY_LOCAL_MACHINE, r"SOFTWARE\Wow6432Node\Syncplay") as key:
+                    opt.append((self.tr("&Play in Syncplay"),self.playandsort,{'syncplayPath':QueryValueEx(key,'Install_Dir')[0]}))
+            except WindowsError:
+                pass # syncplay probably not installed
+        opt.append((self.tr("&Mark All Watched"),self.markSeriesWatched,{}))
 ##        if not isheader:
-        opt.append((self.tr("&Mark Episode Watched"),self.markEpisodeWatched))
+        opt.append((self.tr("&Mark Episode Watched"),self.markEpisodeWatched,{}))
         user_settings = self._sqlManager.getSettings()
         if user_settings['Shana Project Username'] and user_settings['Shana Project Password']:
-            opt.append((self.tr("&Drop Series"),self.dropSeries))
+            opt.append((self.tr("&Drop Series"),self.dropSeries,{}))
         return opt
 
     def openInFileExplorer(self,index,parent):
@@ -519,11 +531,11 @@ You should only use this option if a file fails to download or is moved/deleted 
     def watchfile(self,filepath):
         if os.path.exists(filepath):
             if sys.platform.startswith('darwin'):
-                subprocess.call(('open', filepath))
+                subprocess.Popen(('open', filepath))
             elif os.name == 'nt':
                 os.startfile(filepath)
             elif os.name == 'posix':
-                subprocess.call(('xdg-open', filepath))
+                subprocess.Popen(('xdg-open', filepath))
         else:
             return -1
             
@@ -676,9 +688,9 @@ class TreeView(QtWidgets.QTreeView):
     def openMenu(self, position):
         index = self.selectedIndexes()[0]
         menu = QtWidgets.QMenu()
-        for text, func in self.model().getContextOptions(not index.parent().isValid()):
+        for text, func, kwargs in self.model().getContextOptions(not index.parent().isValid()):
             action = menu.addAction(text)
-            action.triggered.connect(partial(func,index,self))
+            action.triggered.connect(partial(func,index,self,**kwargs))
         menu.exec_(self.viewport().mapToGlobal(position))
         
     def drawBranches(self, painter, rect, index):
