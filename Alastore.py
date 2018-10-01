@@ -21,8 +21,12 @@ from functools import partial
 from shana_interface import ShanaLink
 from functools import reduce
 import stat
-FULLUPDATE_TIME = 1000 * 60 * 10 #once every 10 m
-INITIALUPDATE_GRACEPERIOD = 1000 * 60 * 2 # 2m (this is time before the first (only) quick update)
+from quamash import QEventLoop, QThreadExecutor
+import asyncio
+import errno
+
+FULLUPDATE_TIME = 60 * 10 #once every 10 m
+INITIALUPDATE_GRACEPERIOD = 10000 # 2m (this is time before the first (only) quick update)
 COLORSCHEME = {'background': QtGui.QColor(255,255,255),#
                'watchedh': QtGui.QColor(215,215,215),#
                'downloadedh': QtGui.QColor(255,255,255),#
@@ -200,10 +204,14 @@ class TreeModel(QtCore.QAbstractItemModel):
         self._rootNode = root
         self._sqlManager = sql.SQLManager()
         self._updateData()
-        self._writelock = writelock
-        self._updatelock = updatelock
+        self.async_writelock = asyncio.Lock()
+        self.async_shanalock = asyncio.Lock()
+        self.async_qupdatelock = asyncio.Lock()
+        self.async_updatelock = asyncio.Lock()
         self._threadpool = threadpool
         self._shanalink = ShanaLink()
+        asyncio.ensure_future(self.first_update())
+        asyncio.ensure_future(self.full_update_loop())
 
     def _updateData(self):
         self.data = self._sqlManager.getSeries()
@@ -223,7 +231,7 @@ class TreeModel(QtCore.QAbstractItemModel):
                     n=Node(ep,head)
                 head.update()
         
-    def playandsort(self, index, parent=None, syncplayPath=None):
+    async def playandsort(self, index, parent=None, syncplayPath=None):
         if index.internalPointer().downloaded()>0:
             user_settings = self._sqlManager.getSettings()
             if not user_settings['Save Directory']:
@@ -231,21 +239,17 @@ class TreeModel(QtCore.QAbstractItemModel):
                         self.tr("No Settings Found!"),
                         self.tr("Please fill out the required user settings\nbefore watching an episode."))
             else:
-                'play the file in a separate thread to prevent ui lag.'
                 if index.internalPointer().watched():
                     if syncplayPath:
                         subprocess.Popen((os.path.join(syncplayPath,'Syncplay.exe'),index.internalPointer().path()))
                     else:
                         self.watchfile(index.internalPointer().path())
                 else:
-                    t = SingleFunction(lambda:playmove(user_settings,index),self._writelock)
-                    t._signals.finished.connect(self.sqlDataChanged)
-                    self._threadpool.start(t)
-                def playmove(user_settings, index):
-                    with closing(sql.SQLManager()) as sqlmanager:
-                        def moveAllToFolder(dest_path):
+                    with await self.async_writelock:
+                        # use aiofiles for file operations. the main slowdown here
+                        async def moveAllToFolder(dest_path):
                             dest = os.path.dirname(dest_path)
-                            episodes = sqlmanager.getAllWatchedPaths(dest)
+                            episodes = self._sqlManager.getAllWatchedPaths(dest)
                             for episode in episodes:
                                 path = episode[0]
                                 directory = os.path.dirname(path)
@@ -253,11 +257,11 @@ class TreeModel(QtCore.QAbstractItemModel):
                                 if directory!=dest and os.path.exists(directory):
                                     destfile = os.path.join(dest,filename)
                                     try:
-                                        shutil.move(path,destfile)
-                                        sqlmanager.changePath(path,destfile)
+                                        await loop.run_in_executor(None,shutil.move,path,destfile)
+                                        self._sqlManager.changePath(path,destfile)
                                     except IOError as e:
                                         print('failed to move file: %r'%e)
-                                    TreeModel.cleanFolder(directory)                        
+                                    await TreeModel.cleanFolder(directory)
                         shana_title = index.internalPointer().title()#self.SQL.getSeriesTitle(data['id'])#.decode('utf8')
                         st_dir = user_settings['Save Directory']#.decode('utf8')
                         folder_title = r''.join(i for i in shana_title if i not in r'\/:*?"<>|.')
@@ -270,8 +274,7 @@ class TreeModel(QtCore.QAbstractItemModel):
                         if season:
                             year = season.split()[1]
                             seasonsorted_folder = os.path.join(st_dir,year,season,folder_title)
-                            
-                        
+
                         if user_settings['Season Sort'] and season:
                             dest_folder = seasonsorted_folder
                         else:
@@ -280,9 +283,9 @@ class TreeModel(QtCore.QAbstractItemModel):
                         dest_file = os.path.join(dest_folder,index.internalPointer().file_name())
                         
                         if not os.path.isdir(dest_folder):
-                            os.makedirs(dest_folder)
+                            await loop.run_in_executor(None,os.makedirs,dest_folder)
                         if not os.path.exists(dest_file):
-                            shutil.move(index.internalPointer().path(),dest_file)#.decode('utf8'),dest_file)
+                            await loop.run_in_executor(None,shutil.move,index.internalPointer().path(),dest_file)
                         if syncplayPath:
                             subprocess.Popen((os.path.join(syncplayPath,'Syncplay.exe'),dest_file))
                         else:
@@ -290,24 +293,27 @@ class TreeModel(QtCore.QAbstractItemModel):
                         # we also want to get the ed2k hash asap in case you decide to drop the series right after watching an episode.
                         try:
                             ed2k,filesize=None,None
-                            ed2k,filesize=anidb.anidbInterface.ed2k_hash(dest_file)
+                            result = await loop.run_in_executor(None, anidb.anidbInterface.ed2k_hash, dest_file)
+                            ed2k,filesize = result
                         except Exception as e:
                             print('Error hashing file (initial hash) %s; %r'%(dest_file,e))
-                        sqlmanager.watchMoveQueue(index.internalPointer().path(),dest_file,ed2k,filesize)
+                        self._sqlManager.watchMoveQueue(index.internalPointer().path(),dest_file,ed2k,filesize)
                         try:
-                            moveAllToFolder(dest_file)
+                            await moveAllToFolder(dest_file)
                         except Exception as e:
                             print('Unexpected error, moveAllToFolder failed: %r'%e)
+                        self.sqlDataChanged()
 
     # BE VERY CAREFUL WITH THIS.
     @staticmethod
-    def cleanFolder(path):
+    async def cleanFolder(path):
         if os.path.isdir(path):
             files = os.listdir(path)
             if len(files)<=2:
                 isEmpty = not reduce(lambda x,y: x or not (y.endswith('.ico') or y.lower()=='desktop.ini'), [0]+files)
                 if isEmpty:
-                    shutil.rmtree(path, onerror=TreeModel.remove_readonly)
+                    await loop.run_in_executor(None,lambda: shutil.rmtree(path, onerror=TreeModel.remove_readonly))
+##                    shutil.rmtree(path, onerror=TreeModel.remove_readonly)
 
     # AND EVEN MORE CAREFUL WITH THIS
     @staticmethod
@@ -331,7 +337,7 @@ class TreeModel(QtCore.QAbstractItemModel):
         opt.append((self.tr("&Mark Episode Watched"),self.markEpisodeWatched,{}))
         user_settings = self._sqlManager.getSettings()
         if user_settings['Shana Project Username'] and user_settings['Shana Project Password']:
-            opt.append((self.tr("&Drop Series"),self.dropSeries,{}))
+            opt.append((self.tr("&Drop Series"),self.dropSeries,{}))            
         return opt
 
     def openInFileExplorer(self,index,parent):
@@ -344,129 +350,105 @@ class TreeModel(QtCore.QAbstractItemModel):
         ctypes.windll.ole32.CoUninitialize()
         
     def hideSeries(self,index,parent):
-        if QtWidgets.QMessageBox.Yes == QtWidgets.QMessageBox.warning(
-                parent, self.tr("Hide Series?"),
-                self.tr('''This series will be removed from this list until a new episode appears in your RSS.
+        async def internals():
+            if QtWidgets.QMessageBox.Yes == QtWidgets.QMessageBox.warning(
+                    parent, self.tr("Hide Series?"),
+                    self.tr('''This series will be removed from this list until a new episode appears in your RSS.
 ***You cannot undo this action***
 Are you sure you wish to hide the following series?
 {}''').format(index.internalPointer().title()),
-               QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No):
-            if self._writelock.tryLock():
-                try:
+                   QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No):
+                with await self.async_writelock:
                     self._sqlManager.hideSeries(index.internalPointer().id())
-                finally:
-                    self._writelock.unlock()
-                self.sqlDataChanged()
-            else:
-                t = SQLSingleFunction(self._writelock,'hideSeries',index.internalPointer().id())
-                t._signals.finished.connect(self.sqlDataChanged)
-                self._threadpool.start(t)
+                    self.sqlDataChanged()
+        asyncio.ensure_future(internals())
 
     def markSeriesWatched(self,index,parent):
-        if QtWidgets.QMessageBox.Yes == QtWidgets.QMessageBox.warning(
-            parent, self.tr("Mark Watched?"),
-            self.tr('''This will mark every episode in this series ({}) as watched.
+        async def internals():
+            if QtWidgets.QMessageBox.Yes == QtWidgets.QMessageBox.warning(
+                parent, self.tr("Mark Watched?"),
+                self.tr('''This will mark every episode in this series ({}) as watched.
 This includes files which have not yet been downloaded.
 Marking files watched this way will NOT add them to your mylist nor will it move
 and sort them. It will also render them incapable of being added or sorted in the future.
 Make sure you have watched every episode you mean to watch before doing this.
 Are you sure you wish to mark all episodes of {} as watched?
 (You cannot undo this action)''').format(index.internalPointer().title(),index.internalPointer().title()),
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No):
-            if self._writelock.tryLock():
-                try:
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No):
+                with await self.async_writelock:
                     self._sqlManager.forceWatched(id = index.internalPointer().id())
-                finally:
-                    self._writelock.unlock()
-                self.sqlDataChanged()
-            else:
-                t = SQLSingleFunction(self._writelock,'forceWatched',id=index.internalPointer().id())
-                t._signals.finished.connect(self.sqlDataChanged)
-                self._threadpool.start(t)
+                    self.sqlDataChanged()
+        asyncio.ensure_future(internals())
                 
     def markEpisodeWatched(self,index,parent):
-        if QtWidgets.QMessageBox.Yes == QtWidgets.QMessageBox.warning(
-            parent, self.tr("Mark Watched?"),
-            self.tr('''Are you sure you want to force mark the file: {} as watched?
+        async def internals():
+            if QtWidgets.QMessageBox.Yes == QtWidgets.QMessageBox.warning(
+                parent, self.tr("Mark Watched?"),
+                self.tr('''Are you sure you want to force mark the file: {} as watched?
 Force marking a file this way will NOT automatically sort/move the file and it will NEVER add the file to your mylist.
 You should only use this option if a file fails to download or is moved/deleted before you can watch it through Alastore.''').format(index.internalPointer().name()),
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No):
-            if self._writelock.tryLock():
-                try:
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No):
+                with await self.async_writelock:
                     self._sqlManager.forceWatched(torrenturl = index.internalPointer().torrent_url())
-                finally:
-                    self._writelock.unlock()
-                self.sqlDataChanged()
-##                self.updateEpisodeByIndex(index)
-            else:
-                t = SQLSingleFunction(self._writelock,'forceWatched',torrenturl = index.internalPointer().torrent_url())
-##                t._signals.finished.connect(lambda: self.updateEpisodeByIndex(index)) # idk this func has issues.
-                t._signals.finished.connect(self.sqlDataChanged)
-                self._threadpool.start(t)
+                    self.sqlDataChanged()
+        asyncio.ensure_future(internals())
                 
     def dropSeries(self,index,parent):
+        async def dropfunc():
+            with await self.async_writelock:
+                user_settings = self._sqlManager.getSettings()
+                title = index.internalPointer().title()
+                id = index.internalPointer().id()
+                if user_settings['Shana Project Username'] and user_settings['Shana Project Password']:
+                    with await self.async_shanalock:
+##                        await self._shanalink.update_creds(user_settings['Shana Project Username'],user_settings['Shana Project Password'])
+                        self._shanalink.update_creds(user_settings['Shana Project Username'],user_settings['Shana Project Password'])
+                        success = 0
+                        try:
+##                            success = await self._shanalink.delete_follow(title)
+                            success = await loop.run_in_executor(None,self._shanalink.delete_follow,title)
+                        except Exception as e:
+                            print('Error dropping series: %r'%e)
+                            QtWidgets.QMessageBox.information(parent,self.tr('Drop Failed'),self.tr('Could not connect to Shana Project to drop {}, check your login credentials and internet connection.').format(index.internalPointer().title()))
+                        else:
+                            if success:
+                                self._sqlManager.hideSeries(id)
+                                if delete:
+                                    paths = self._sqlManager.getAllPaths(id)
+                                    for path in paths:
+                                        directory = os.path.dirname(path)
+                                        if os.path.isfile(path):
+                                            await loop.run_in_executor(None,os.remove,path)
+                                        await TreeModel.cleanFolder(directory)
+                                    self._sqlManager.dropSeries(id)
+                                self.sqlDataChanged()
+                            else:
+                                QtWidgets.QMessageBox.information(parent,self.tr('Drop Failed'),self.tr('Could not connect to Shana Project to drop {}, check your login credentials and internet connection.').format(index.internalPointer().title()))
+                else:
+                    QtWidgets.QMessageBox.information(parent,self.tr('Drop Failed'),self.tr('Could not connect to Shana Project to drop {}, check your login credentials and internet connection.').format(index.internalPointer().title()))
         drop = DropDialog(index.internalPointer().title(),parent)
         drop.exec_()
         drop,delete = drop.getValues()
         if drop:
-            t = SingleFunction(lambda:dropfunc(self._shanalink,index,parent),self._writelock)
-            t._signals.finished.connect(self.sqlDataChanged)
-            t._signals.finishedWithErrors.connect(lambda: QtWidgets.QMessageBox.information(parent,self.tr('Drop Failed'),self.tr('Could not connect to Shana Project to drop {}, check your login credentials and internet connection.').format(index.internalPointer().title())))
-            self._threadpool.start(t)
-        def dropfunc(shanalink,index,parent):
-            with closing(sql.SQLManager()) as _sql:
-                user_settings = _sql.getSettings()
-                title = index.internalPointer().title()
-                id = index.internalPointer().id()
-                # is shanalink threadsafe?
-                if user_settings['Shana Project Username'] and user_settings['Shana Project Password']:
-                    shanalink.update_creds(user_settings['Shana Project Username'],user_settings['Shana Project Password'])
-                    success = 0
-                    try:
-                        success = shanalink.delete_follow(title)
-                    except Exception as e:
-                        print('Error dropping series: %r'%e)
-                        raise
-                    if success:
-                        _sql.hideSeries(id)
-                        if delete:
-                            paths = _sql.getAllPaths(id)
-                            for path in paths:
-                                directory = os.path.dirname(path)
-                                if os.path.isfile(path):
-                                    os.remove(path)
-                                TreeModel.cleanFolder(directory)
-                            _sql.dropSeries(id)
-                    
-    def showAgainDialog(self,parent):
+            asyncio.ensure_future(dropfunc())
+
+    async def showAgainDialog(self,parent):
         if not self._sqlManager.getShowAgain():
             d=StillRunningDialog(parent)
             d.exec_()
             showagain=d.getValues()
             if showagain:
-                if self._writelock.tryLock():
-                    try:
-                        self._sqlManager.setShowAgain(showagain)
-                    finally:
-                        self._writelock.unlock()
-                else:
-                    t = SQLSingleFunction(self._writelock,'setShowAgain',showagain)
-                    self._threadpool.start(t)
+                with await self.async_writelock:
+                    self._sqlManager.setShowAgain(showagain)
                     
-    def configDialog(self,parent):
+    async def configDialog(self,parent):
         settings = self._sqlManager.getSettings(raw=True,fetchanyway=True)
         d=SettingsDialog(settings,parent)
         d.exec_()
         if d.getValues():
             settings = d.getValues()
-            if self._writelock.tryLock():
-                try:
-                    self._sqlManager.saveSettings(*[settings[key] for key in self._sqlManager.COLUMN_NAMES])
-                finally:
-                    self._writelock.unlock()
-            else:
-                t = SQLSingleFunction(self._writelock,'saveSettings',*[settings[key] for key in self._sqlManager.COLUMN_NAMES])
-                self._threadpool.start(t)
+            with await self.async_writelock:
+                self._sqlManager.saveSettings(*[settings[key] for key in self._sqlManager.COLUMN_NAMES])
         d.deleteLater()
 
     def quickUpdate(self):
@@ -540,7 +522,8 @@ You should only use this option if a file fails to download or is moved/deleted 
             return -1
             
     def dblClickEvent(self, index):
-        self.playandsort(index)        
+        asyncio.ensure_future(self.playandsort(index))
+##        self.playandsort(index)       
     
     """INPUTS: QModelIndex, int"""
     """OUTPUT: QVariant, strings are cast to QString which is a QVariant"""
@@ -676,7 +659,270 @@ You should only use this option if a file fails to download or is moved/deleted 
         self._rootNode.sort()
         self.layoutChanged.emit()
         pass
-        
+
+    async def full_update_loop(self):
+        await asyncio.sleep(10) # wait 5m before first update
+        while 1:
+            try:
+                await self.do_update()
+            except Exception as e:
+                import traceback
+                logging.error(str(e))
+                logging.error(traceback.format_exc())
+            finally:
+                await asyncio.sleep(FULLUPDATE_TIME)
+
+    async def first_update(self):
+        await asyncio.sleep(INITIALUPDATE_GRACEPERIOD) #1m before file check
+        await self.do_update(quick=True)
+    
+    async def do_update(self, quick=False):
+        # these are the methods we can use:
+##        fileupdate = FullUpdate(self._writelock,self._updatelock,quick=True)
+##        fileupdate._signals.dataModified.connect(self.sqlDataChanged)
+##        fileupdate._signals.updateEpisode.connect(self.updateEpisode)
+##        self._threadpool.start(fileupdate)
+
+        # prevent spamming by quick restarts
+##        await asyncio.sleep(5*60) # wait 5m before first update
+        async def dl_titlelist():
+            titleUpdateTime = self._sqlManager.titleUpdateTime()
+            if titleUpdateTime:
+                titleList = None
+                try:
+                    titleList = await loop.run_in_executor(None,anidb.anidb_title_list) ## WEB-DEPENDENT
+                except (urllib.error.URLError,urllib.error.HTTPError,TimeoutError) as e:
+                    'banned or site is down'
+                    print('failed to fetch anidb title list. (%r)'%e)
+                if titleList:
+                    with await self.async_writelock:
+                        await self._sqlManager.cacheTitles(titleList)
+        async def hash_files():
+            toHash = self._sqlManager.getUnhashed()
+            hasherrors=0
+            for file in toHash:
+                ed2k = None
+                try:
+                    result = await loop.run_in_executor(None,anidb.anidbInterface.ed2k_hash,file) ## WEB-DEPENDENT
+                    ed2k,filesize = result
+                except Exception as e:
+                    # if hashing fails on one file, we don't want to exclude the others.
+                    hasherrors+=1 # we never do anything with this, this is an issue.
+                if ed2k:
+                    with await self.async_writelock:
+                        self._sqlManager.updateHash(file,ed2k,filesize)
+            return hasherrors
+
+        async def get_new_from_rss():
+            '''parse your rss and find new files; for each file download the torrent file'''
+            user_settings = self._sqlManager.getSettings()
+            reader = rss.RSSReader()
+            rssitems = await loop.run_in_executor(None,lambda: reader.getFiles(user_settings['RSS Feed']))## WEB-DEPENDENT ( but handles exceptions itself )
+            with await self.async_writelock:
+                torrentBlacklist = self._sqlManager.getTorrentBlacklist()
+            for item in rssitems:
+                if item[2] not in torrentBlacklist:
+                                                                                                #file name, rsstitle,torrent url 
+                    if self._sqlManager.addEpisode(os.path.join(user_settings['Download Directory'],item[1]),item[0],item[2]):
+                        torrentdata = await loop.run_in_executor(None,torrentprogress.download_torrent,item[2]) ## WEB-DEPENDENT ( but handles exceptions itself )
+                        if torrentdata:
+                            try:
+                                filename = torrentprogress.file_name(io.BytesIO(torrentdata))
+                            except torrentprogress.BatchTorrentException as e:
+                                print('initial bencode failed %r'%e)
+                                print('episode (%s) was removed and blacklisted.'%item[1])
+                                with await self.async_writelock:
+                                    self._sqlManager.removeEpisode(item[2],permablacklist=True)
+                            except Exception as e:
+                                print('initial bencode failed %r'%e)
+                                print('pre-removing %s.'%item[1])
+                                with await self.async_writelock:
+                                    self._sqlManager.removeEpisode(item[2],len(torrentdata)) # if torrentdata is len(0) don't blacklist <== this state is impossible to reach
+                            else:
+                                path = os.path.join(user_settings['Download Directory'],filename)
+                                with await self.async_writelock:
+                                    self._sqlManager.addTorrentData(path,item[2],torrentdata,filename)
+                                self.sqlDataChanged()
+
+        async def anidb_adds():
+            print('attempting anidb add')
+            with await self.async_writelock:
+                user_settings, toAdd = self._sqlManager.getToAdd()
+            def internals():
+                results=[]
+                if user_settings and len(toAdd) and user_settings['anidb Username'] and user_settings['anidb Password']:
+                    with closing(anidb.anidbInterface()) as anidbLink: ## WEB-DEPENDENT
+                        if anidbLink.open_session(user_settings['anidb Username'],user_settings['anidb Password']):
+                            for datum in toAdd:
+                                aid=anidbLink.add_file(datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add'])
+                                time.sleep(2) # don't want to get banned somehow
+                                # these match with: status, filepath, aid, subgroup, epnum, ed2k, do_generic_add
+                                logging.debug('anidb add status:%s, vars used: %s\t%s\t%s\t%s\t%s\t%s'%(aid,datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add']))
+                                
+                return results
+            results = await loop.run_in_executor(None, internals)
+
+            print('results got',len(results))
+            for datum in results:
+                with await self.async_writelock:
+                    self._sqlManager.removeParsed(datum[1],forceadded=datum[2],aid=datum[3])
+                if not datum[3] and datum[0]>0: # if an aid did not exist but was returned by add
+                    with await self.async_writelock:
+                        self._sqlManager.updateAids(((datum[0],datum[4]),)) # we most likely don't need to update data for this...
+            print('done')
+
+        async def check_file_changes():
+            # this is the file update (the part that should run when you pick the context menu option)
+            user_settings = self._sqlManager.getSettings()
+            allseries = self._sqlManager.getDownloadingSeries()
+            dl_dir = user_settings['Download Directory']
+            # we replace space with _ here, make sure to do this to all the strings you want to match.
+            originalFiles = os.listdir(dl_dir)
+            potentialFiles = [re.sub(r'[ ]+',r'_',x) for x in originalFiles]
+            potentialMatches = dict(list(zip(potentialFiles,originalFiles)))
+            for series in list(allseries.values()):
+                for episode in series:
+                    pattern,replacement = rss.RSSReader.invalidCharReplacement(user_settings['RSS Feed'])                    
+                    workingFile = re.sub(pattern,replacement,episode['file_name'])
+                    if workingFile in potentialMatches:
+                        filename = potentialMatches[workingFile]
+                        path=os.path.join(dl_dir,filename)
+                        torrentdata=episode['torrent_data']
+                        percent_downloaded=episode['download_percent']
+                        if not torrentdata:
+                            torrent = await loop.run_in_executor(None,torrentprogress.download_torrent,episode['torrent_url'])
+                            if torrent:
+                                torrentdata=torrent
+                        if torrentdata:
+                            try:
+                                result = await loop.run_in_executor(None,torrentprogress.percentCompleted,io.BytesIO(torrentdata),path)
+                                percent_downloaded, torrentdata = result
+                            except torrentprogress.BatchTorrentException as e:
+                                print('bencode failed %r'%e)
+                                print('episode (%s) was removed and blacklisted.'%episode['display_name'])
+                                with await self.async_writelock:
+                                    self._sqlManager.removeEpisode(episode['torrent_url'],permablacklist=True)
+                                continue
+                            except Exception as e:
+                                print('bencode failed %r'%e)
+                                print('episode (%s) was removed.'%episode['display_name'])
+                                with await self.async_writelock:
+                                    self._sqlManager.removeEpisode(episode['torrent_url'],len(torrentdata))
+                                continue
+                            with await self.async_writelock:
+                                self._sqlManager.setDownloading(episode['torrent_url'],filename,torrentdata,percent_downloaded)
+            if len(allseries):
+                self.sqlDataChanged()
+        async def get_series_info():
+##            wait= time.time()
+            for aid in self._sqlManager.oneDayOldAids():
+                try:
+##                    time_elapsed = time.time() - wait
+##                    if time_elapsed < 2:
+##                        await asyncio.sleep(2-time_elapsed)
+                    result = await loop.run_in_executor(None,anidb.anidb_series_info,aid)
+                    airdate,imgurl = result
+##                    wait = time.time()
+                    SEASONS = ['Spring','Summer','Fall','Winter']
+                    date = datetime.datetime.strptime(airdate,'%Y-%m-%d')
+                    sixtydays = datetime.timedelta(60)
+                    date-=sixtydays
+                    dayofyear = int(date.strftime('%j'))
+                    dayofseason = datetime.timedelta(dayofyear%91)
+                    date -= dayofseason
+                    date += sixtydays
+                    seasonindex =(dayofyear-(dayofyear%91))//91
+                    seasonname= '%s %s'%(SEASONS[seasonindex],date.strftime('%Y'))
+                    with await self.async_writelock:
+                        self._sqlManager.updateSeriesInfo(((aid,airdate,seasonname,imgurl),))
+                except Exception as e:
+                    print('anidb_series_info failed on %s [%r]'%(aid,e))
+                    with await self.async_writelock:
+                        self._sqlManager.updateSeriesInfoTime((aid,))
+                finally:
+                    await asyncio.sleep(2)
+        async def dl_poster_icons():
+            ''' also sets the icons '''
+            user_settings = self._sqlManager.getSettings()
+            if os.name == 'nt' and user_settings['Poster Icons']: # only works on windows.
+                newIcons = self._sqlManager.getOutdatedPosters()
+                print('got',len(newIcons),'outdated posters')
+                
+                '''hashes the selected files, also downloads poster art if applicable'''
+                for icon in newIcons:
+                    folder_title = r''.join(i for i in icon['title'] if i not in r'\/:*?"<>|.')
+                    dest_folder = os.path.join(user_settings['Save Directory'],folder_title)
+                    if user_settings['Season Sort'] and icon['season']:
+                        year = icon['season'].split()[1]
+                        dest_folder = os.path.join(user_settings['Save Directory'],year,icon['season'],folder_title)
+                    try:
+                        if icon['aid'] and os.path.exists(dest_folder) and (not os.path.exists(os.path.join(dest_folder,'%i.ico'%icon['aid'])) or not icon['nochange']):
+                            print('making new icon for',icon['aid'],dest_folder)
+                            await loop.run_in_executor(None,makeico.makeIcon,icon['aid'],icon['poster_url'],dest_folder)
+                        with await self.async_writelock:
+                            self._sqlManager.updateCoverArts(((icon['aid'],icon['poster_url']),))
+                    except IOError as e:
+                        if e.errno!=errno.ENOENT:
+                            raise
+                        '''errno 2 is file/directory does not exist.
+                        this simply means you tried to get poster art before any episodes were downloaded.
+                        we will just try to get the art again at a later date'''
+                    except Exception as e:
+                        print('failed to download series image for %s [%r]'%(icon['title'],e))
+                    finally:
+                        with await self.async_writelock:
+                            self._sqlManager.updateCoverArts(((icon['aid'],None),))
+##        while 1:
+##            try:
+        with await self.async_updatelock: # just to prevent multiple updates at once if one runs too long somehow
+            if self._sqlManager.getSettings():
+                print(quick,'update')
+                # do some bookkeeping
+                with await self.async_writelock:
+                    changes = self._sqlManager.hideOldSeries()
+                    if changes:
+                        self.sqlDataChanged()
+                
+                # some time consuming stuff:
+                # download the anidb title list if needed
+                # hash all files awaiting hashing
+                print('p1')
+                if not quick:
+                    await dl_titlelist()
+                    await hash_files()
+
+                # get new files from rss and also download the torrents
+                print('p2')
+                with await self.async_qupdatelock:
+                    await get_new_from_rss()
+                    await check_file_changes() # moved this up from its former location below to make quick update lock shorter
+                print('p3')
+                if not quick:
+                    try:
+                        # add parsed files to anidb, very finnicky so we wrap it in a try
+                        await anidb_adds()
+                    except (ConnectionRefusedError, TimeoutError) as e:
+                        logging.error('AniDB add failed (%r)'%e)
+
+                    # attempt to title match one unconfirmed aid, may take some time depending on computer. cant really be run async without creating a new sql connection.
+                    with await self.async_writelock:
+                        self._sqlManager.updateOneUnknownAid()
+                print('p4')
+                # check for downloaded files
+                # await check_file_changes()
+                
+                if not quick:
+                    # get anidb info for new series
+                    await get_series_info()
+                    # set poster icons
+                    await dl_poster_icons()
+                print('p5')
+##            except Exception as e:
+##                import traceback
+##                logging.error(str(e))
+##                logging.error(traceback.format_exc())
+##            finally:
+##                asyncio.sleep(FULLUPDATE_TIME)
 #-------------------------------------------------------------------------------
 class TreeView(QtWidgets.QTreeView):
 #---------------------------------------------------------------------------
@@ -791,53 +1037,6 @@ class ItemDelegate(QtWidgets.QStyledItemDelegate):
     def getHeaderHeight(self, fontMetrics):
         return fontMetrics.height()+self.textVertPadding+self.listPadding[1]*2
 
-class SingleFunction(QtCore.QRunnable):
-    '''
-    Worker thread
-    '''
-    def __init__(self, func, lock):
-        super(SingleFunction, self).__init__()
-        self._func = func
-        self._writelock = lock
-        self._signals = WorkerSignals()
-
-    @QtCore.pyqtSlot()
-    def run(self):
-        '''
-        Your code goes in this function
-        '''
-        with QMutexLocker(self._writelock):
-            try:
-                self._func()
-                self._signals.finished.emit()
-            except:
-                self._signals.finishedWithErrors.emit()
-
-class SQLSingleFunction(QtCore.QRunnable):
-    '''
-    Worker thread
-    '''
-    def __init__(self, lock, func, *args, **kwargs):
-        super(SingleFunction, self).__init__()
-        self._func = func
-        self._args = args
-        self._kwargs = kwargs
-        self._writelock = lock
-        self._signals = WorkerSignals()
-
-    @QtCore.pyqtSlot()
-    def run(self):
-        '''
-        Your code goes in this function
-        '''
-        with closing(sql.SQLManager()) as sql:
-            with QMutexLocker(self._writelock):
-                try:
-                    getattr(sql, self._func)(*self._args, **self._kwargs)
-                    self._signals.finished.emit()
-                except:
-                    self._signals.finishedWithErrors.emit()
-
 class WorkerSignals(QtCore.QObject):
     finished = QtCore.pyqtSignal()
     finishedWithErrors = QtCore.pyqtSignal()
@@ -845,244 +1044,7 @@ class WorkerSignals(QtCore.QObject):
     updateEpisode = QtCore.pyqtSignal(tuple)
     error = QtCore.pyqtSignal(tuple)
     result = QtCore.pyqtSignal(object)
-    
-class FullUpdate(QtCore.QRunnable):
-    '''
-    Worker thread
-    '''
-    def __init__(self, writelock, updatelock, quick=False):
-        super(FullUpdate, self).__init__()
-##        self._conn=conn
-        self._quick=quick
-        self._writelock = writelock
-        self._updatelock = updatelock
-        self._signals = WorkerSignals()
-        
-    def dl_titlelist(self):
-        titleUpdateTime = self._sql.titleUpdateTime()
-        if titleUpdateTime:
-            titleList = None
-            try:
-                titleList = anidb.anidb_title_list() ## WEB-DEPENDENT
-            except (urllib.error.URLError,urllib.error.HTTPError,TimeoutError) as e:
-                'banned or site is down'
-                print('failed to fetch anidb title list. (%r)'%e)
-            if titleList:
-                with QMutexLocker(self._writelock):
-                    self._sql.cacheTitles(titleList)# updates user_settings
-    def hash_files(self):
-        toHash = self._sql.getUnhashed()
-        hasherrors=0
-        for file in toHash:
-            ed2k = None
-            try:
-                ed2k,filesize=anidb.anidbInterface.ed2k_hash(file) ## WEB-DEPENDENT
-            except (urllib.error.URLError,urllib.error.HTTPError,TimeoutError) as e:
-                # if hashing fails on one file, we don't want to exclude the others.
-                hasherrors+=1 # we never do anything with this
-            if ed2k:
-                with QMutexLocker(self._writelock):
-                    self._sql.updateHash(file,ed2k,filesize)
-        return hasherrors
 
-    def get_new_from_rss(self):
-        '''parse your rss and find new files; for each file download the torrent file'''
-        user_settings = self._sql.getSettings()
-        rssitems = rss.RSSReader().getFiles(user_settings['RSS Feed']) ## WEB-DEPENDENT ( but handles exceptions itself )
-        with QMutexLocker(self._writelock):
-            torrentBlacklist = self._sql.getTorrentBlacklist()
-        for item in rssitems:
-            if item[2] not in torrentBlacklist:
-                                                                                            #file name, rsstitle,torrent url 
-                if self._sql.addEpisode(os.path.join(user_settings['Download Directory'],item[1]),item[0],item[2]):
-                    torrentdata = torrentprogress.download_torrent(item[2]) ## WEB-DEPENDENT ( but handles exceptions itself )
-                    if torrentdata:
-                        try:
-                            filename = torrentprogress.file_name(io.BytesIO(torrentdata))
-                        except torrentprogress.BatchTorrentException as e:
-                            print('initial bencode failed %r'%e)
-                            print('episode (%s) was removed and blacklisted.'%item[1])
-                            with QMutexLocker(self._writelock):
-                                self._sql.removeEpisode(item[2],permablacklist=True)
-                        except Exception as e:
-                            print('initial bencode failed %r'%e)
-                            print('pre-removing %s.'%item[1])
-                            with QMutexLocker(self._writelock):
-                                self._sql.removeEpisode(item[2],len(torrentdata)) # if torrentdata is len(0) don't blacklist <== this state is impossible to reach
-                        else:
-                            path = os.path.join(user_settings['Download Directory'],filename)
-                            with QMutexLocker(self._writelock):
-                                self._sql.addTorrentData(path,item[2],torrentdata,filename)
-                            self._signals.dataModified.emit()
-
-    def anidb_adds(self):
-        with QMutexLocker(self._writelock):
-            user_settings, toAdd = self._sql.getToAdd()
-            
-        self.newAids=[]
-        if user_settings and len(toAdd) and user_settings['anidb Username'] and user_settings['anidb Password']:
-            with closing(anidb.anidbInterface()) as anidbLink: ## WEB-DEPENDENT
-                if anidbLink.open_session(user_settings['anidb Username'],user_settings['anidb Password']):
-                    for datum in toAdd:
-                        aid=anidbLink.add_file(datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add'])
-                        # these match with: status, filepath, aid, subgroup, epnum, ed2k, do_generic_add
-                        logging.debug('anidb add status:%s, vars used: %s\t%s\t%s\t%s\t%s\t%s'%(aid,datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add']))
-                        
-                        if aid:#if the add succeeded.
-                            with QMutexLocker(self._writelock):
-                                self._sql.removeParsed(datum['path'],forceadded=datum['force_generic_add'],aid=datum['aid'])
-                            if not datum['aid'] and aid>0: # if an aid did not exist but was returned by add
-                                with QMutexLocker(self._writelock):
-                                    self._sql.updateAids(((aid,datum['id']),)) # we most likely don't need to update data for this...
-
-    def check_file_changes(self):
-        # this is the file update (the part that should run when you pick the context menu option)
-        user_settings = self._sql.getSettings()
-        allseries = self._sql.getDownloadingSeries()
-        dl_dir = user_settings['Download Directory']
-        # we replace space with _ here, make sure to do this to all the strings you want to match.
-        originalFiles = os.listdir(dl_dir)
-        potentialFiles = [re.sub(r'[ ]+',r'_',x) for x in originalFiles]
-        potentialMatches = dict(list(zip(potentialFiles,originalFiles)))
-        for series in list(allseries.values()):
-            for episode in series:
-                pattern,replacement = rss.RSSReader.invalidCharReplacement(user_settings['RSS Feed'])                    
-                workingFile = re.sub(pattern,replacement,episode['file_name'])
-                if workingFile in potentialMatches:
-                    filename = potentialMatches[workingFile]
-                    path=os.path.join(dl_dir,filename)
-                    torrentdata=episode['torrent_data']
-                    percent_downloaded=episode['download_percent']
-                    if not torrentdata:
-                        torrent = torrentprogress.download_torrent(episode['torrent_url'])
-                        if torrent:
-                            torrentdata=torrent
-                    if torrentdata:
-                        try:
-                            percent_downloaded, torrentdata=torrentprogress.percentCompleted(io.BytesIO(torrentdata),path)
-                        except torrentprogress.BatchTorrentException as e:
-                            print('bencode failed %r'%e)
-                            print('episode (%s) was removed and blacklisted.'%episode['display_name'])
-                            with QMutexLocker(self._writelock):
-                                self._sql.removeEpisode(episode['torrent_url'],permablacklist=True)
-                            continue
-                        except Exception as e:
-                            print('bencode failed %r'%e)
-                            print('episode (%s) was removed.'%episode['display_name'])
-                            with QMutexLocker(self._writelock):
-                                self._sql.removeEpisode(episode['torrent_url'],len(torrentdata))
-                            continue
-                        with QMutexLocker(self._writelock):
-                            self._sql.setDownloading(episode['torrent_url'],filename,torrentdata,percent_downloaded)
-##                          self._signals.updateEpisode.emit((episode['id'],episode['torrent_url']))
-        if len(allseries):
-            self._signals.dataModified.emit()
-    def get_series_info(self):
-        wait= time.time()
-        for aid in self._sql.oneDayOldAids():
-            try:
-                while time.time() - wait < 2: pass
-                airdate,imgurl = anidb.anidb_series_info(aid)
-                wait = time.time()
-                SEASONS = ['Spring','Summer','Fall','Winter']
-                date = datetime.datetime.strptime(airdate,'%Y-%m-%d')
-                sixtydays = datetime.timedelta(60)
-                date-=sixtydays
-                dayofyear = int(date.strftime('%j'))
-                dayofseason = datetime.timedelta(dayofyear%91)
-                date -= dayofseason
-                date += sixtydays
-                seasonindex =(dayofyear-(dayofyear%91))//91
-                seasonname= '%s %s'%(SEASONS[seasonindex],date.strftime('%Y'))
-                with QMutexLocker(self._writelock):
-                    self._sql.updateSeriesInfo(((aid,airdate,seasonname,imgurl),))
-            except Exception as e:
-                print('anidb_series_info failed on %s [%r]'%(aid,e))
-                with QMutexLocker(self._writelock):
-                    self._sql.updateSeriesInfoTime((aid,))
-    def dl_poster_icons(self):
-        ''' also sets the icons '''
-        user_settings = self._sql.getSettings()
-        if os.name == 'nt' and user_settings['Poster Icons']: # only works on windows.
-            newIcons = self._sql.getOutdatedPosters()
-            
-            '''hashes the selected files, also downloads poster art if applicable'''
-            for icon in newIcons:
-                folder_title = r''.join(i for i in icon['title'] if i not in r'\/:*?"<>|.')
-                dest_folder = os.path.join(user_settings['Save Directory'],folder_title)
-                if user_settings['Season Sort'] and icon['season']:
-                    year = icon['season'].split()[1]
-                    dest_folder = os.path.join(user_settings['Save Directory'],year,icon['season'],folder_title)
-                try:
-                    if icon['aid'] and os.path.exists(dest_folder) and (not os.path.exists(os.path.join(dest_folder,'%i.ico'%icon['aid'])) or not icon['nochange']):
-                        makeico.makeIcon(icon['aid'],icon['poster_url'],dest_folder)
-                    with QMutexLocker(self._writelock):
-                        self._sql.updateCoverArts(((icon['aid'],icon['poster_url']),))
-                except IOError as e:
-                    if e.errno!=errno.ENOENT:
-                        raise
-                    '''errno 2 is file/directory does not exist.
-                    this simply means you tried to get poster art before any episodes were downloaded.
-                    we will just try to get the art again at a later date'''
-                except Exception as e:
-                    print('failed to download series image for %s [%r]'%(icon['title'],e))
-                finally:
-                    with QMutexLocker(self._writelock):
-                        self._sql.updateCoverArts(((icon['aid'],None),))
-    
-    @QtCore.pyqtSlot()
-    def run(self):
-        '''
-        Your code goes in this function
-        '''
-        try:
-            with QMutexLocker(self._updatelock):
-                with closing(sql.SQLManager()) as self._sql:
-                    quick = self._quick
-                    if not self._sql.getSettings():
-                        self._signals.finished.emit()
-                        return
-                    # do some bookkeeping
-                    with QMutexLocker(self._writelock):
-                        changes = self._sql.hideOldSeries()
-                        if changes:
-                            self._signals.dataModified.emit()
-                    
-                    # some time consuming stuff:
-                    # download the anidb title list if needed
-                    # hash all files awaiting hashing
-                    if not quick:
-                        self.dl_titlelist()
-                        self.hash_files()
-
-                    # get new files from rss and also download the torrents
-                    self.get_new_from_rss()
-
-                    if not quick:
-                        try:
-                            # add parsed files to anidb, very finnicky so we wrap it in a try
-                            self.anidb_adds()
-                        except (ConnectionRefusedError, TimeoutError) as e:
-                            logging.error('AniDB add failed (%r)'%e)
-
-                        # attempt to title match one unconfirmed aid
-                        with QMutexLocker(self._writelock):
-                            self._sql.updateOneUnknownAid()
-
-                    # check for downloaded files
-                    self.check_file_changes()
-                    
-                    if not quick:
-                        # get anidb info for new series
-                        self.get_series_info()
-                        # set poster icons
-                        self.dl_poster_icons()
-                    self._signals.finished.emit()
-        except Exception as e:
-            import traceback
-            logging.error(str(e))
-            logging.error(traceback.format_exc())
-            self._signals.finishedWithErrors.emit()
 
 class SettingsDialog(QtWidgets.QDialog):
     def __init__(self,initialSettings, parent=None):
@@ -1322,7 +1284,7 @@ class HideableWithDialog(HideableWindow):
         
     def closeEvent(self,event):
             super(HideableWithDialog,self).closeEvent(event)
-            self._model.showAgainDialog(self.centralWidget())
+            asyncio.ensure_future(self._model.showAgainDialog(self.centralWidget()))
 
 from qtrayico import Systray
 
@@ -1428,6 +1390,7 @@ ul { margin: 0; padding: 0; }
                 
         self.quitAction = QtWidgets.QAction(self.tr("&Quit"), self)
         self.quitAction.triggered.connect(QtWidgets.QApplication.quit)
+##        self.quitAction.triggered.connect(self.clean_exit)
         
         self.actions.append(self.updateAction)
         self.actions.append(self.configAction)
@@ -1438,7 +1401,19 @@ ul { margin: 0; padding: 0; }
         self._model.quickUpdate()
 
     def showConfig(self):
-        self._model.configDialog(self.main_window)
+        asyncio.ensure_future(self._model.configDialog(self.main_window))
+
+##    def clean_exit(self):
+##        print('canceling all of', len(asyncio.Task.all_tasks(loop)), 'tasks...')
+##        for task in asyncio.Task.all_tasks():
+##            print('cancelling a task SOMEHOW')
+####            task.cancel()
+##        asyncio.ensure_future(self.stoploop())
+##    async def stoploop(self):
+##        asyncio.sleep(5000)
+##        await loop.stop()
+####        QtWidgets.QApplication.quit()
+        
 
 if __name__ == '__main__':
     if os.path.exists('DEBUG_TEST'):
@@ -1450,6 +1425,9 @@ if __name__ == '__main__':
     with closing(sql.SQLManager(createtables = True)) as s:pass
     
     app = QtWidgets.QApplication(sys.argv)
+    loop = QEventLoop(app)
+    
+    asyncio.set_event_loop(loop)
 ##    app.setStyle('Plastique')
     
     rootNode   = Node({})
@@ -1476,23 +1454,23 @@ if __name__ == '__main__':
     model.sort(0)
 ##    treeView.show()
 
-    fileupdate = FullUpdate(writelock,updatelock,quick=True)
-    fileupdate._signals.dataModified.connect(model.sqlDataChanged)
-    fileupdate._signals.updateEpisode.connect(model.updateEpisode)
-
-    fullupdate = FullUpdate(writelock,updatelock)
-    fullupdate._signals.dataModified.connect(model.sqlDataChanged)
-    fullupdate._signals.updateEpisode.connect(model.updateEpisode)
-
-    fullupdate.setAutoDelete(False)
-    fullupdatetimer = QtCore.QTimer()
-    fullupdatetimer.setInterval(FULLUPDATE_TIME)
-    fullupdatetimer.timeout.connect(lambda: threadpool.start(fullupdate))
-    fullupdatetimer.start()
+##    fileupdate = FullUpdate(writelock,updatelock,quick=True)
+##    fileupdate._signals.dataModified.connect(model.sqlDataChanged)
+##    fileupdate._signals.updateEpisode.connect(model.updateEpisode)
+##
+##    fullupdate = FullUpdate(writelock,updatelock)
+##    fullupdate._signals.dataModified.connect(model.sqlDataChanged)
+##    fullupdate._signals.updateEpisode.connect(model.updateEpisode)
+##
+##    fullupdate.setAutoDelete(False)
+##    fullupdatetimer = QtCore.QTimer()
+##    fullupdatetimer.setInterval(FULLUPDATE_TIME)
+##    fullupdatetimer.timeout.connect(lambda: threadpool.start(fullupdate))
+##    fullupdatetimer.start()
 
 ##    QtCore.QTimer.singleShot(2000,lambda: threadpool.start(fullupdate))
 
-    QtCore.QTimer.singleShot(INITIALUPDATE_GRACEPERIOD,lambda: threadpool.start(fileupdate))
+##    QtCore.QTimer.singleShot(INITIALUPDATE_GRACEPERIOD,lambda: threadpool.start(fileupdate))
 
     main = HideableWithDialog(model)#QtWidgets.QMainWindow()
 
@@ -1507,4 +1485,17 @@ if __name__ == '__main__':
         main.show()
     app.setQuitOnLastWindowClosed(False)
 
-    sys.exit(app.exec_())
+##    sys.exit(app.exec_())
+
+    
+    with loop: ## context manager calls .close() when loop completes, and releases all resources
+##        with aiohttp.ClientSession(loop=loop) as async_session:
+##            model.shana_init(async_session)
+##        with ShanaLink() as sl:
+    ##        loop.run_until_complete(register())
+        loop.run_forever()
+
+##        pending = asyncio.Task.all_tasks()
+##        print(len(pending),'tasks remaining')
+##        loop.run_until_complete(asyncio.gather(*pending))
+    

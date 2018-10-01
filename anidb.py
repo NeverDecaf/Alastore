@@ -57,7 +57,7 @@ def anidb_series_info(aid):
         for episode in xmldoc.getElementsByTagName('epno'):
             if episode.getAttribute('type')=='1' and episode.firstChild.nodeValue=='3':
                 airdate = episode.parentNode.getElementsByTagName('airdate')[0].firstChild.nodeValue
-    return airdate,imageurl
+    return (airdate,imageurl)
 
 def anidb_title_list():
     request = urllib.request.Request('http://anidb.net/api/anime-titles.xml.gz',None,FAKE_HEADERS)
