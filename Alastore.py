@@ -26,7 +26,9 @@ import asyncio
 import errno
 
 FULLUPDATE_TIME = 60 * 10 #once every 10 m
-INITIALUPDATE_GRACEPERIOD = 10000 # 2m (this is time before the first (only) quick update)
+INITIALUPDATE_GRACEPERIOD = 30 # 2m (this is time before the first (only) quick update)
+FULLUPDATE_GRACEPERIOD = 60*5 # 5m time before first full update
+
 COLORSCHEME = {'background': QtGui.QColor(255,255,255),#
                'watchedh': QtGui.QColor(215,215,215),#
                'downloadedh': QtGui.QColor(255,255,255),#
@@ -452,10 +454,12 @@ You should only use this option if a file fails to download or is moved/deleted 
         d.deleteLater()
 
     def quickUpdate(self):
-        fileupdate = FullUpdate(self._writelock,self._updatelock,quick=True)
-        fileupdate._signals.dataModified.connect(self.sqlDataChanged)
-        fileupdate._signals.updateEpisode.connect(self.updateEpisode)
-        self._threadpool.start(fileupdate)
+##        await self.do_update(quick=True)
+        asyncio.ensure_future(self.do_update(quick=True))
+##        fileupdate = FullUpdate(self._writelock,self._updatelock,quick=True)
+##        fileupdate._signals.dataModified.connect(self.sqlDataChanged)
+##        fileupdate._signals.updateEpisode.connect(self.updateEpisode)
+##        self._threadpool.start(fileupdate)
         
     def sqlDataChanged(self):
         # if something was changed by an external source (thread)
@@ -661,7 +665,7 @@ You should only use this option if a file fails to download or is moved/deleted 
         pass
 
     async def full_update_loop(self):
-        await asyncio.sleep(10) # wait 5m before first update
+        await asyncio.sleep(FULLUPDATE_GRACEPERIOD) # wait 5m before first update
         while 1:
             try:
                 await self.do_update()
@@ -717,14 +721,16 @@ You should only use this option if a file fails to download or is moved/deleted 
             '''parse your rss and find new files; for each file download the torrent file'''
             user_settings = self._sqlManager.getSettings()
             reader = rss.RSSReader()
-            rssitems = await loop.run_in_executor(None,lambda: reader.getFiles(user_settings['RSS Feed']))## WEB-DEPENDENT ( but handles exceptions itself )
+            feed_url = user_settings['RSS Feed']
+            rssitems = await loop.run_in_executor(None,lambda: reader.getFiles(feed_url))## WEB-DEPENDENT ( but handles exceptions itself )
             with await self.async_writelock:
                 torrentBlacklist = self._sqlManager.getTorrentBlacklist()
             for item in rssitems:
                 if item[2] not in torrentBlacklist:
                                                                                                 #file name, rsstitle,torrent url 
                     if self._sqlManager.addEpisode(os.path.join(user_settings['Download Directory'],item[1]),item[0],item[2]):
-                        torrentdata = await loop.run_in_executor(None,torrentprogress.download_torrent,item[2]) ## WEB-DEPENDENT ( but handles exceptions itself )
+                        torrent_url=item[2]
+                        torrentdata = await loop.run_in_executor(None,torrentprogress.download_torrent,torrent_url) ## WEB-DEPENDENT ( but handles exceptions itself )
                         if torrentdata:
                             try:
                                 filename = torrentprogress.file_name(io.BytesIO(torrentdata))
@@ -748,19 +754,20 @@ You should only use this option if a file fails to download or is moved/deleted 
             print('attempting anidb add')
             with await self.async_writelock:
                 user_settings, toAdd = self._sqlManager.getToAdd()
+            results=[]
             def internals():
                 results=[]
-                if user_settings and len(toAdd) and user_settings['anidb Username'] and user_settings['anidb Password']:
-                    with closing(anidb.anidbInterface()) as anidbLink: ## WEB-DEPENDENT
-                        if anidbLink.open_session(user_settings['anidb Username'],user_settings['anidb Password']):
-                            for datum in toAdd:
-                                aid=anidbLink.add_file(datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add'])
-                                time.sleep(2) # don't want to get banned somehow
-                                # these match with: status, filepath, aid, subgroup, epnum, ed2k, do_generic_add
-                                logging.debug('anidb add status:%s, vars used: %s\t%s\t%s\t%s\t%s\t%s'%(aid,datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add']))
-                                
+                with closing(anidb.anidbInterface()) as anidbLink: ## WEB-DEPENDENT
+                    if anidbLink.open_session(user_settings['anidb Username'],user_settings['anidb Password']):
+                        for datum in toAdd:
+                            aid=anidbLink.add_file(datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add'])
+                            time.sleep(2) # don't want to get banned somehow
+                            results.append((aid,datum['path'],datum['force_generic_add'],datum['aid'],datum['id']))
+                            # these match with: status, filepath, aid, subgroup, epnum, ed2k, do_generic_add
+                            logging.debug('anidb add status:%s, vars used: %s\t%s\t%s\t%s\t%s\t%s'%(aid,datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add']))
                 return results
-            results = await loop.run_in_executor(None, internals)
+            if user_settings and len(toAdd) and user_settings['anidb Username'] and user_settings['anidb Password']:
+                results = await loop.run_in_executor(None, internals)
 
             print('results got',len(results))
             for datum in results:
@@ -874,49 +881,62 @@ You should only use this option if a file fails to download or is moved/deleted 
                             self._sqlManager.updateCoverArts(((icon['aid'],None),))
 ##        while 1:
 ##            try:
-        with await self.async_updatelock: # just to prevent multiple updates at once if one runs too long somehow
+                            
+        if not quick:
+            with await self.async_updatelock: # just to prevent multiple updates at once if one runs too long somehow
+                if self._sqlManager.getSettings():
+                    print(quick,'update')
+                    # do some bookkeeping
+                    with await self.async_writelock:
+                        changes = self._sqlManager.hideOldSeries()
+                        if changes:
+                            self.sqlDataChanged()
+                    
+                    # some time consuming stuff:
+                    # download the anidb title list if needed
+                    # hash all files awaiting hashing
+                    print('p1')
+                    if not quick:
+                        await dl_titlelist()
+                        await hash_files()
+
+                    # get new files from rss and also download the torrents
+                    print('p2')
+                    with await self.async_qupdatelock:
+                        await get_new_from_rss()
+                        await check_file_changes() # moved this up from its former location below to make quick update lock shorter
+                    print('p3')
+                    if not quick:
+                        try:
+                            # add parsed files to anidb, very finnicky so we wrap it in a try
+                            await anidb_adds()
+                        except (ConnectionRefusedError, TimeoutError) as e:
+                            logging.error('AniDB add failed (%r)'%e)
+
+                        # attempt to title match one unconfirmed aid, may take some time depending on computer. cant really be run async without creating a new sql connection.
+                        with await self.async_writelock:
+                            self._sqlManager.updateOneUnknownAid()
+                    print('p4')
+                    # check for downloaded files
+                    # await check_file_changes()
+                    
+                    if not quick:
+                        # get anidb info for new series
+                        await get_series_info()
+                        # set poster icons
+                        await dl_poster_icons()
+                    
+        else:
             if self._sqlManager.getSettings():
                 print(quick,'update')
-                # do some bookkeeping
                 with await self.async_writelock:
                     changes = self._sqlManager.hideOldSeries()
                     if changes:
                         self.sqlDataChanged()
-                
-                # some time consuming stuff:
-                # download the anidb title list if needed
-                # hash all files awaiting hashing
-                print('p1')
-                if not quick:
-                    await dl_titlelist()
-                    await hash_files()
-
-                # get new files from rss and also download the torrents
-                print('p2')
                 with await self.async_qupdatelock:
                     await get_new_from_rss()
-                    await check_file_changes() # moved this up from its former location below to make quick update lock shorter
-                print('p3')
-                if not quick:
-                    try:
-                        # add parsed files to anidb, very finnicky so we wrap it in a try
-                        await anidb_adds()
-                    except (ConnectionRefusedError, TimeoutError) as e:
-                        logging.error('AniDB add failed (%r)'%e)
-
-                    # attempt to title match one unconfirmed aid, may take some time depending on computer. cant really be run async without creating a new sql connection.
-                    with await self.async_writelock:
-                        self._sqlManager.updateOneUnknownAid()
-                print('p4')
-                # check for downloaded files
-                # await check_file_changes()
-                
-                if not quick:
-                    # get anidb info for new series
-                    await get_series_info()
-                    # set poster icons
-                    await dl_poster_icons()
-                print('p5')
+                    await check_file_changes()
+        print('update done')
 ##            except Exception as e:
 ##                import traceback
 ##                logging.error(str(e))
@@ -1416,8 +1436,15 @@ ul { margin: 0; padding: 0; }
         
 
 if __name__ == '__main__':
+    import logging.handlers
     if os.path.exists('DEBUG_TEST'):
-        logging.basicConfig(level=logging.DEBUG, filename='DEBUG.log')
+        log_fh = open("DEBUG.log", "a", encoding="utf-8")
+##        logging.basicConfig(level=logging.DEBUG)
+        ch = logging.StreamHandler(log_fh)
+        ch.setLevel(logging.DEBUG)
+        log = logging.getLogger()
+        log.addHandler(ch)
+##        logging.basicConfig(level=logging.DEBUG, filename='DEBUG.log')
     else:
         logging.basicConfig(level=logging.DEBUG, stream=io.BytesIO())
         logging.disable(logging.DEBUG)
@@ -1428,6 +1455,7 @@ if __name__ == '__main__':
     loop = QEventLoop(app)
     
     asyncio.set_event_loop(loop)
+    loop.set_default_executor(QThreadExecutor(1))
 ##    app.setStyle('Plastique')
     
     rootNode   = Node({})

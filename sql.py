@@ -172,7 +172,7 @@ custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shan
     async def cacheTitles(self, titles):
         for aid,ttype,lang,title in titles:
             self.cursor.execute('''REPLACE INTO titles VALUES (?,?,?,?)''',(aid,ttype,lang,title))
-            asyncio.sleep(0)
+            await asyncio.sleep(0)
         self.cursor.execute('''UPDATE user_settings SET title_update=strftime('%s', 'now') WHERE id=0''')
         self.conn.commit()
         

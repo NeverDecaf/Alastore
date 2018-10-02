@@ -69,6 +69,7 @@ def anidb_title_list():
             data = f.read()
         else:
             data=response.read()
+            
     xmldoc = minidom.parseString(data)
     itemlist = xmldoc.getElementsByTagName('anime')
     titles=[]
@@ -358,3 +359,15 @@ class anidbInterface:
             return None
         self.socket.close()
         self.socket=None
+
+if __name__ == '__main__':
+    import asyncio
+    titleList=anidb_title_list()
+    import sql
+    _sqlManager = sql.SQLManager()
+    async def say():
+        await _sqlManager.cacheTitles(titleList)
+
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(say())
+    loop.close()
