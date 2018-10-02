@@ -26,7 +26,7 @@ import asyncio
 import errno
 
 FULLUPDATE_TIME = 60 * 10 #once every 10 m
-INITIALUPDATE_GRACEPERIOD = 30 # 2m (this is time before the first (only) quick update)
+INITIALUPDATE_GRACEPERIOD = 30 # this is time before the first (only) quick update
 FULLUPDATE_GRACEPERIOD = 60*5 # 5m time before first full update
 
 COLORSCHEME = {'background': QtGui.QColor(255,255,255),#
@@ -677,7 +677,7 @@ You should only use this option if a file fails to download or is moved/deleted 
                 await asyncio.sleep(FULLUPDATE_TIME)
 
     async def first_update(self):
-        await asyncio.sleep(INITIALUPDATE_GRACEPERIOD) #1m before file check
+        await asyncio.sleep(INITIALUPDATE_GRACEPERIOD) # wait to prevent spam by repeat restarts
         await self.do_update(quick=True)
     
     async def do_update(self, quick=False):
@@ -962,6 +962,25 @@ class TreeView(QtWidgets.QTreeView):
     def drawBranches(self, painter, rect, index):
         # don't draw the dropdown decorations.
         pass
+
+    def sizeHint(self):
+        model = self.model()
+        rootNode = model._rootNode#getNode(QtCore.QModelIndex())
+        fm = self.fontMetrics()
+        delegate = self.itemDelegate()
+##        print(max([fm.boundingRect(c.name()).width() for c in rootNode.getChildren()]))
+        # can be done with list comprehension but it looks a mess
+        length = 0
+        for series in rootNode.getChildren():
+            for ep in series.getChildren():
+                length = max(length,fm.boundingRect(ep.name()).width())
+##        print(max([fm.boundingRect(c.name()).width() for c in [n.getChildren() for n in rootNode.getChildren()]]))
+        w = length +\
+            delegate.listPadding[0]*2 +\
+            delegate.textPadding[0]+delegate.textPadding[1] +\
+            delegate.getHeaderHeight(fm)
+        #+delegate.listPadding[1]*4+delegate.getHeaderHeight(fm)*2
+        return QtCore.QSize(w,delegate.listPadding[1]*2+delegate.getHeaderHeight(fm)*rootNode.childCount())
     
 class ItemDelegate(QtWidgets.QStyledItemDelegate):
     listPadding = (0,2)#padding that will go around the sides of the list. you only get horizontal and vertical
@@ -1468,7 +1487,6 @@ if __name__ == '__main__':
     model = TreeModel(rootNode,writelock,updatelock,threadpool)
     delegate = ItemDelegate()
     
-    
     treeView.setExpandsOnDoubleClick(False)
     treeView.header().hide()
 ##    treeView.header().setStretchLastSection(True);
@@ -1507,7 +1525,7 @@ if __name__ == '__main__':
     tray = trayIcon(main,model)
 
     main.setCentralWidget(treeView)
-    main.resize(QtCore.QSize(350,delegate.listPadding[1]*2+delegate.getHeaderHeight(treeView.fontMetrics())*rootNode.childCount()))
+##    main.resize(QtCore.QSize(350,delegate.listPadding[1]*2+delegate.getHeaderHeight(treeView.fontMetrics())*rootNode.childCount()))
 ##    main.move(QtCore.QPoint(main.pos().x(),0))
     if '-q' not in sys.argv and '/q' not in sys.argv and '/silent' not in sys.argv:
         main.show()
