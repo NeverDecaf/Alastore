@@ -454,12 +454,7 @@ You should only use this option if a file fails to download or is moved/deleted 
         d.deleteLater()
 
     def quickUpdate(self):
-##        await self.do_update(quick=True)
         asyncio.ensure_future(self.do_update(quick=True))
-##        fileupdate = FullUpdate(self._writelock,self._updatelock,quick=True)
-##        fileupdate._signals.dataModified.connect(self.sqlDataChanged)
-##        fileupdate._signals.updateEpisode.connect(self.updateEpisode)
-##        self._threadpool.start(fileupdate)
         
     def sqlDataChanged(self):
         # if something was changed by an external source (thread)
@@ -681,14 +676,6 @@ You should only use this option if a file fails to download or is moved/deleted 
         await self.do_update(quick=True)
     
     async def do_update(self, quick=False):
-        # these are the methods we can use:
-##        fileupdate = FullUpdate(self._writelock,self._updatelock,quick=True)
-##        fileupdate._signals.dataModified.connect(self.sqlDataChanged)
-##        fileupdate._signals.updateEpisode.connect(self.updateEpisode)
-##        self._threadpool.start(fileupdate)
-
-        # prevent spamming by quick restarts
-##        await asyncio.sleep(5*60) # wait 5m before first update
         async def dl_titlelist():
             titleUpdateTime = self._sqlManager.titleUpdateTime()
             if titleUpdateTime:
@@ -751,7 +738,6 @@ You should only use this option if a file fails to download or is moved/deleted 
                                 self.sqlDataChanged()
 
         async def anidb_adds():
-            print('attempting anidb add')
             with await self.async_writelock:
                 user_settings, toAdd = self._sqlManager.getToAdd()
             results=[]
@@ -769,14 +755,12 @@ You should only use this option if a file fails to download or is moved/deleted 
             if user_settings and len(toAdd) and user_settings['anidb Username'] and user_settings['anidb Password']:
                 results = await loop.run_in_executor(None, internals)
 
-            print('results got',len(results))
             for datum in results:
                 with await self.async_writelock:
                     self._sqlManager.removeParsed(datum[1],forceadded=datum[2],aid=datum[3])
                 if not datum[3] and datum[0]>0: # if an aid did not exist but was returned by add
                     with await self.async_writelock:
                         self._sqlManager.updateAids(((datum[0],datum[4]),)) # we most likely don't need to update data for this...
-            print('done')
 
         async def check_file_changes():
             # this is the file update (the part that should run when you pick the context menu option)
@@ -821,15 +805,10 @@ You should only use this option if a file fails to download or is moved/deleted 
             if len(allseries):
                 self.sqlDataChanged()
         async def get_series_info():
-##            wait= time.time()
             for aid in self._sqlManager.oneDayOldAids():
                 try:
-##                    time_elapsed = time.time() - wait
-##                    if time_elapsed < 2:
-##                        await asyncio.sleep(2-time_elapsed)
                     result = await loop.run_in_executor(None,anidb.anidb_series_info,aid)
                     airdate,imgurl = result
-##                    wait = time.time()
                     SEASONS = ['Spring','Summer','Fall','Winter']
                     date = datetime.datetime.strptime(airdate,'%Y-%m-%d')
                     sixtydays = datetime.timedelta(60)
@@ -853,8 +832,7 @@ You should only use this option if a file fails to download or is moved/deleted 
             user_settings = self._sqlManager.getSettings()
             if os.name == 'nt' and user_settings['Poster Icons']: # only works on windows.
                 newIcons = self._sqlManager.getOutdatedPosters()
-                print('got',len(newIcons),'outdated posters')
-                
+
                 '''hashes the selected files, also downloads poster art if applicable'''
                 for icon in newIcons:
                     folder_title = r''.join(i for i in icon['title'] if i not in r'\/:*?"<>|.')
@@ -864,7 +842,6 @@ You should only use this option if a file fails to download or is moved/deleted 
                         dest_folder = os.path.join(user_settings['Save Directory'],year,icon['season'],folder_title)
                     try:
                         if icon['aid'] and os.path.exists(dest_folder) and (not os.path.exists(os.path.join(dest_folder,'%i.ico'%icon['aid'])) or not icon['nochange']):
-                            print('making new icon for',icon['aid'],dest_folder)
                             await loop.run_in_executor(None,makeico.makeIcon,icon['aid'],icon['poster_url'],dest_folder)
                         with await self.async_writelock:
                             self._sqlManager.updateCoverArts(((icon['aid'],icon['poster_url']),))
@@ -879,13 +856,10 @@ You should only use this option if a file fails to download or is moved/deleted 
                     finally:
                         with await self.async_writelock:
                             self._sqlManager.updateCoverArts(((icon['aid'],None),))
-##        while 1:
-##            try:
                             
         if not quick:
             with await self.async_updatelock: # just to prevent multiple updates at once if one runs too long somehow
                 if self._sqlManager.getSettings():
-                    print(quick,'update')
                     # do some bookkeeping
                     with await self.async_writelock:
                         changes = self._sqlManager.hideOldSeries()
@@ -895,17 +869,14 @@ You should only use this option if a file fails to download or is moved/deleted 
                     # some time consuming stuff:
                     # download the anidb title list if needed
                     # hash all files awaiting hashing
-                    print('p1')
                     if not quick:
                         await dl_titlelist()
                         await hash_files()
 
                     # get new files from rss and also download the torrents
-                    print('p2')
                     with await self.async_qupdatelock:
                         await get_new_from_rss()
                         await check_file_changes() # moved this up from its former location below to make quick update lock shorter
-                    print('p3')
                     if not quick:
                         try:
                             # add parsed files to anidb, very finnicky so we wrap it in a try
@@ -916,7 +887,6 @@ You should only use this option if a file fails to download or is moved/deleted 
                         # attempt to title match one unconfirmed aid, may take some time depending on computer. cant really be run async without creating a new sql connection.
                         with await self.async_writelock:
                             self._sqlManager.updateOneUnknownAid()
-                    print('p4')
                     # check for downloaded files
                     # await check_file_changes()
                     
@@ -928,7 +898,6 @@ You should only use this option if a file fails to download or is moved/deleted 
                     
         else:
             if self._sqlManager.getSettings():
-                print(quick,'update')
                 with await self.async_writelock:
                     changes = self._sqlManager.hideOldSeries()
                     if changes:
@@ -936,7 +905,6 @@ You should only use this option if a file fails to download or is moved/deleted 
                 with await self.async_qupdatelock:
                     await get_new_from_rss()
                     await check_file_changes()
-        print('update done')
 ##            except Exception as e:
 ##                import traceback
 ##                logging.error(str(e))
@@ -1440,29 +1408,23 @@ ul { margin: 0; padding: 0; }
         self._model.quickUpdate()
 
     def showConfig(self):
-        asyncio.ensure_future(self._model.configDialog(self.main_window))
-
-##    def clean_exit(self):
-##        print('canceling all of', len(asyncio.Task.all_tasks(loop)), 'tasks...')
-##        for task in asyncio.Task.all_tasks():
-##            print('cancelling a task SOMEHOW')
-####            task.cancel()
-##        asyncio.ensure_future(self.stoploop())
-##    async def stoploop(self):
-##        asyncio.sleep(5000)
-##        await loop.stop()
-####        QtWidgets.QApplication.quit()
-        
+        asyncio.ensure_future(self._model.configDialog(self.main_window))        
 
 if __name__ == '__main__':
     import logging.handlers
+    log_fh = None
     if os.path.exists('DEBUG_TEST'):
         log_fh = open("DEBUG.log", "a", encoding="utf-8")
-##        logging.basicConfig(level=logging.DEBUG)
         ch = logging.StreamHandler(log_fh)
-        ch.setLevel(logging.DEBUG)
+        formatter = logging.Formatter()
+        ch.setFormatter(formatter)
+##        ch.setLevel(logging.DEBUG)
         log = logging.getLogger()
         log.addHandler(ch)
+        log.setLevel(logging.DEBUG)
+
+        qlog = logging.getLogger('quamash')
+        qlog.setLevel(logging.ERROR)
 ##        logging.basicConfig(level=logging.DEBUG, filename='DEBUG.log')
     else:
         logging.basicConfig(level=logging.DEBUG, stream=io.BytesIO())
@@ -1489,59 +1451,31 @@ if __name__ == '__main__':
     
     treeView.setExpandsOnDoubleClick(False)
     treeView.header().hide()
-##    treeView.header().setStretchLastSection(True);
     treeView.setItemDelegate(delegate)
     treeView.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
     treeView.doubleClicked.connect(model.dblClickEvent)
-##    treeView.resize(QtCore.QSize(350,delegate.listPadding[1]*2+delegate.getHeaderHeight(treeView.fontMetrics())*rootNode.childCount()))
+
     treeView.setIndentation(delegate.getHeaderHeight(treeView.fontMetrics()))
     treeView.setModel(model)
     
     model.sort(0)
-##    treeView.show()
 
-##    fileupdate = FullUpdate(writelock,updatelock,quick=True)
-##    fileupdate._signals.dataModified.connect(model.sqlDataChanged)
-##    fileupdate._signals.updateEpisode.connect(model.updateEpisode)
-##
-##    fullupdate = FullUpdate(writelock,updatelock)
-##    fullupdate._signals.dataModified.connect(model.sqlDataChanged)
-##    fullupdate._signals.updateEpisode.connect(model.updateEpisode)
-##
-##    fullupdate.setAutoDelete(False)
-##    fullupdatetimer = QtCore.QTimer()
-##    fullupdatetimer.setInterval(FULLUPDATE_TIME)
-##    fullupdatetimer.timeout.connect(lambda: threadpool.start(fullupdate))
-##    fullupdatetimer.start()
-
-##    QtCore.QTimer.singleShot(2000,lambda: threadpool.start(fullupdate))
-
-##    QtCore.QTimer.singleShot(INITIALUPDATE_GRACEPERIOD,lambda: threadpool.start(fileupdate))
-
-    main = HideableWithDialog(model)#QtWidgets.QMainWindow()
+    main = HideableWithDialog(model)
 
     main.setWindowTitle('Alastore')
     main.setWindowIcon(QtGui.QIcon(resource_path("book.ico")))
     tray = trayIcon(main,model)
 
     main.setCentralWidget(treeView)
-##    main.resize(QtCore.QSize(350,delegate.listPadding[1]*2+delegate.getHeaderHeight(treeView.fontMetrics())*rootNode.childCount()))
-##    main.move(QtCore.QPoint(main.pos().x(),0))
     if '-q' not in sys.argv and '/q' not in sys.argv and '/silent' not in sys.argv:
         main.show()
     app.setQuitOnLastWindowClosed(False)
 
-##    sys.exit(app.exec_())
-
-    
     with loop: ## context manager calls .close() when loop completes, and releases all resources
-##        with aiohttp.ClientSession(loop=loop) as async_session:
-##            model.shana_init(async_session)
-##        with ShanaLink() as sl:
-    ##        loop.run_until_complete(register())
         loop.run_forever()
-
-##        pending = asyncio.Task.all_tasks()
-##        print(len(pending),'tasks remaining')
-##        loop.run_until_complete(asyncio.gather(*pending))
-    
+    log = logging.getLogger()
+    x = logging._handlers.copy()
+    for i in x:
+        log.removeHandler(i)
+        i.flush()
+        i.close()
