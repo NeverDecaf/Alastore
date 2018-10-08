@@ -133,7 +133,7 @@ class Node(object):
 
     def sort(self):
         self._children.sort(key=lambda n: (n.watched(),n.downloaded(),n.name().lower()))
-        
+
     def log(self, tabLevel=-1):
         output     = ""
         tabLevel += 1
@@ -654,10 +654,9 @@ You should only use this option if a file fails to download or is moved/deleted 
     
     def sort(self, column=0, order=QtCore.Qt.AscendingOrder):
         #only 1 column here
-        self.layoutAboutToBeChanged.emit()
+##        self.layoutAboutToBeChanged.emit()
         self._rootNode.sort()
         self.layoutChanged.emit()
-        pass
 
     async def full_update_loop(self):
         await asyncio.sleep(FULLUPDATE_GRACEPERIOD) # wait 5m before first update
@@ -1043,15 +1042,6 @@ class ItemDelegate(QtWidgets.QStyledItemDelegate):
         
     def getHeaderHeight(self, fontMetrics):
         return fontMetrics.height()+self.textVertPadding+self.listPadding[1]*2
-
-class WorkerSignals(QtCore.QObject):
-    finished = QtCore.pyqtSignal()
-    finishedWithErrors = QtCore.pyqtSignal()
-    dataModified = QtCore.pyqtSignal()
-    updateEpisode = QtCore.pyqtSignal(tuple)
-    error = QtCore.pyqtSignal(tuple)
-    result = QtCore.pyqtSignal(object)
-
 
 class SettingsDialog(QtWidgets.QDialog):
     def __init__(self,initialSettings, parent=None):
