@@ -232,6 +232,9 @@ class TreeModel(QtCore.QAbstractItemModel):
                 for ep in reversed(self.data[series]):
                     n=Node(ep,head)
                 head.update()
+                
+    def _playandsortasyncwrapper(self, index, parent=None, syncplayPath=None):
+        asyncio.ensure_future(self.playandsort(index, parent=parent, syncplayPath=syncplayPath))
         
     async def playandsort(self, index, parent=None, syncplayPath=None):
         if index.internalPointer().downloaded()>0:
@@ -331,7 +334,7 @@ class TreeModel(QtCore.QAbstractItemModel):
             from winreg import OpenKey,QueryValueEx,HKEY_LOCAL_MACHINE
             try:
                 with OpenKey(HKEY_LOCAL_MACHINE, r"SOFTWARE\Wow6432Node\Syncplay") as key:
-                    opt.append((self.tr("&Play in Syncplay"),self.playandsort,{'syncplayPath':QueryValueEx(key,'Install_Dir')[0]}))
+                    opt.append((self.tr("&Play in Syncplay"),self._playandsortasyncwrapper,{'syncplayPath':QueryValueEx(key,'Install_Dir')[0]}))
             except WindowsError:
                 pass # syncplay probably not installed
         opt.append((self.tr("&Mark All Watched"),self.markSeriesWatched,{}))
@@ -521,8 +524,8 @@ You should only use this option if a file fails to download or is moved/deleted 
             return -1
             
     def dblClickEvent(self, index):
-        asyncio.ensure_future(self.playandsort(index))
-##        self.playandsort(index)       
+##        asyncio.ensure_future(self.playandsort(index))
+        self._playandsortasyncwrapper(index)       
     
     """INPUTS: QModelIndex, int"""
     """OUTPUT: QVariant, strings are cast to QString which is a QVariant"""
