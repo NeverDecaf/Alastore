@@ -270,6 +270,8 @@ class TreeModel(QtCore.QAbstractItemModel):
                         shana_title = index.internalPointer().title()#self.SQL.getSeriesTitle(data['id'])#.decode('utf8')
                         st_dir = user_settings['Save Directory']#.decode('utf8')
                         folder_title = r''.join(i for i in shana_title if i not in r'\/:*?"<>|.')
+                        if os.name == 'nt':
+                            folder_title = folder_title.strip() # windows doesn't allow whitespace at start or end of dir names
 
                         # check usersettings for usesubfolders.
                         # if true/false move existing files from one to the other
