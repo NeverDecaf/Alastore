@@ -120,13 +120,17 @@ def seticon_unicode(folderpath, iconpath, iconindex, relative=1):
     if hr == 0:
         raise WindowsError()#win32api.FormatMessage(hr))
 
-    index = shell32.Shell_GetCachedImageIndexW(sfi.szDisplayName, sfi.iIcon, 0)
-    if index == -1:
-        raise WindowsError()
+    shell32.SHUpdateImageA(sfi.szDisplayName, 0, 0, 0)
+    
 
-    shell32.SHUpdateImageW(sfi.szDisplayName, sfi.iIcon, 0, index)
+##    index = shell32.Shell_GetCachedImageIndexW(sfi.szDisplayName, sfi.iIcon, 0)
+##    if index == -1:
+##        raise WindowsError()
+##
+##    shell32.SHUpdateImageW(sfi.szDisplayName, sfi.iIcon, 0, index)
     
 if __name__=='__main__':
     import sys
     if len(sys.argv)==3:
-        seticon(sys.argv[1],sys.argv[2],0)
+        seticon_unicode(sys.argv[1],sys.argv[2],0)
+        'path,icon_path'

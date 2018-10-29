@@ -141,4 +141,4 @@ def percentCompleted(torrent_file,filepath):
     info[b'pieces'] = pieces.read()
 ##    reencode = bencode.bencode(metainfo)
     reencode = lt.bencode(metainfo)
-    return int(100.*(totalpieces-piececount)/totalpieces) , reencode #buffer(reencode)
+    return (int(100.*(totalpieces-piececount)/totalpieces) , reencode) #buffer(reencode)

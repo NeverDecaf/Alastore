@@ -5,6 +5,7 @@ import urllib.parse
 from StringMatcher import StringMatcher
 from rss import RSSReader
 from collections import defaultdict
+import asyncio
 ### READ THIS BEFORE CHANGING THE TIMES BELOW ###
 # setting these higher is a terrible idea
 # because failures still reset the timer so you may wait a week even though it was a simple outage
@@ -168,9 +169,10 @@ custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shan
             d[r['title']].append(r)
         return d
     
-    def cacheTitles(self, titles):
+    async def cacheTitles(self, titles):
         for aid,ttype,lang,title in titles:
             self.cursor.execute('''REPLACE INTO titles VALUES (?,?,?,?)''',(aid,ttype,lang,title))
+            await asyncio.sleep(0)
         self.cursor.execute('''UPDATE user_settings SET title_update=strftime('%s', 'now') WHERE id=0''')
         self.conn.commit()
         
@@ -399,3 +401,4 @@ ELSE aid END AS aid
             self.cursor.execute('''UPDATE shana_series SET aid=?,verified_aid=1 WHERE id=?''',pair)
         self.conn.commit()
 
+        
