@@ -320,7 +320,7 @@ class TreeModel(QtCore.QAbstractItemModel):
                                 print('Unexpected error, moveAllToFolder failed: %r'%e)
                             self.sqlDataChanged()
         finally:
-            if isheader:
+            if isheader or isnew:
                 self.async_watchlock.release()
 
     # BE VERY CAREFUL WITH THIS.
