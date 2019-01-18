@@ -826,7 +826,10 @@ You should only use this option if a file fails to download or is moved/deleted 
                     result = await loop.run_in_executor(None,anidb.anidb_series_info,aid)
                     airdate,imgurl = result
                     SEASONS = ['Spring','Summer','Fall','Winter']
-                    date = datetime.datetime.strptime(airdate,'%Y-%m-%d')
+                    try:
+                        date = datetime.datetime.strptime(airdate,'%Y-%m-%d')
+                    except:
+                        date = datetime.datetime.strptime(airdate,'%Y-%m')
                     sixtydays = datetime.timedelta(60)
                     date-=sixtydays
                     dayofyear = int(date.strftime('%j'))
