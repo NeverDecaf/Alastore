@@ -1,9 +1,10 @@
 from xml.dom import minidom
-import urllib.request, urllib.error, urllib.parse
+import urllib.parse
 import contextlib
 import socket
 import re
 import urllib.parse
+import requests
 try:
     # Python 2.6-2.7 
     from html.parser import HTMLParser
@@ -72,10 +73,9 @@ class RSSReader:
         return url
 
     def _getFilesShanaproject(self,url,count):
-        request = urllib.request.Request(self.url+'&count='+str(count))
         try:
-            with contextlib.closing(urllib.request.urlopen(request)) as response:
-                xmldoc = minidom.parseString(response.read())
+            with requests.get(self.url+'&count='+str(count)) as response:
+                xmldoc = minidom.parseString(response.content)
                 itemlist = xmldoc.getElementsByTagName('item')
                 episodes=[]
                 for item in itemlist:
@@ -84,7 +84,7 @@ class RSSReader:
                       item.childNodes[2].firstChild.nodeValue,
                       self._stripAndEnforceSSL(item.childNodes[1].firstChild.nodeValue)))))
             return episodes
-        except urllib.error.URLError as e:
+        except requests.exceptions.RequestException as e:
             print(("There was an error in rss.py: %r" % e))
         except TimeoutError as e:
             print(("There was an error in rss.py: %r" % e))
