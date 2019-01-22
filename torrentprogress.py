@@ -1,7 +1,8 @@
-import urllib.request, urllib.error, urllib.parse
+
 HEADERS={'User-Agent':'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.9.0.7) Gecko/2009021910 Firefox/3.0.7'} # we will now get a 403 without these, it might not be long before we need cookies too.
 # due to the nature of magnet links, the data may not always be available. therefore we must timeout eventually.
 MAGNET_TIMEOUT = 70 # in seconds
+import requests
 import libtorrent as lt
 import tempfile
 import shutil
@@ -55,18 +56,16 @@ def download_torrent(url):
             print(("There was an error downloading from the magnet link in torrentprogress.py: %r" % e))
             raise
             return None
-    request = urllib.request.Request(url, headers=HEADERS)
     try:
-        a=urllib.request.urlopen(request)
-        torrent = a.read()
-        a.close()
+        with requests.get(url, headers=HEADERS) as r:
+            torrent = r.content
         return torrent
-    except urllib.error.URLError as e:
-        print(url)
+    except requests.exceptions.RequestException as e:
+##        print(url)
         print(("There was an error in torrentprogress.py: %r" % e))
-        print(e.args)
-    except urllib.error.HTTPError as e:
-        print('(HTTP error code is:%s)'%e.code)
+##        print(e.args)
+##    except urllib.error.HTTPError as e:
+##        print('(HTTP error code is:%s)'%e.code)
     except socket.timeout as e:
         print(("There was an error in torrentprogress.py: %r" % e))
     return None
