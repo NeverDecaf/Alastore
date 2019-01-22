@@ -45,8 +45,10 @@ class ShanaLink:
         if not self._login():
             return False
         # generate an xpath to match the name of the follow:
-        match_name = "//tr[td//text()='%s']/@id"%name
+##        match_name = '//tr[td//text()="%s"]/@id'%name
+        match_name = "//tr[td//text()=concat('{}')]/@id".format('\',"\'",\''.join(name.split("'")).strip(','))
         next_page = "//div[@class='grid_2 list_next']//a/@href"
+        print('dropping series matching:',match_name)
         url = self.LIST_URL
         while url:
             response = self.SESSION.get(url)
