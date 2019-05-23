@@ -169,10 +169,10 @@ custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shan
             d[r['title']].append(r)
         return d
     
-    async def cacheTitles(self, titles):
-        for aid,ttype,lang,title in titles:
-            self.cursor.execute('''REPLACE INTO titles VALUES (?,?,?,?)''',(aid,ttype,lang,title))
-            await asyncio.sleep(0)
+    def cacheTitles(self, titles):
+        query = '''REPLACE INTO titles VALUES {}'''.format(','.join(['(?,?,?,?)']*len(titles)))
+        if len(titles):
+            self.cursor.execute(query,[item for sublist in titles for item in sublist])
         self.cursor.execute('''UPDATE user_settings SET title_update=strftime('%s', 'now') WHERE id=0''')
         self.conn.commit()
         

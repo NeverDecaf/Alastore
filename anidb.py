@@ -119,6 +119,9 @@ class anidbInterface:
         try:
             if not self._auth(user,passw):
                 return None
+        except socket.timeout as e:
+            print(("anidb auth timed out: %r"%e))
+            return 0
         except Exception as e:
             print(("error with anidb auth: %r"%e))
             return None
