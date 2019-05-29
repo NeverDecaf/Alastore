@@ -101,6 +101,12 @@ class SQLManager:
         self.cursor.execute('''INSERT OR IGNORE INTO user_settings (id) VALUES (0)''')
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS bad_torrents
                  (url text PRIMARY KEY, last_update integer DEFAULT (strftime('%s', 'now')))''')
+        self.cursor.execute('''CREATE TABLE IF NOT EXISTS anidb_limiting
+                 (id integer PRIMARY KEY DEFAULT 0,
+                 delay real DEFAULT 675,
+                 last_update real DEFAULT 0,
+                 last_seriesinfo read DEFAULT 0)''')
+        self.cursor.execute('''INSERT OR IGNORE INTO anidb_limiting (id) VALUES (0)''')
         self.conn.commit()
 
     # saves the supplied user settings into the db.
@@ -401,4 +407,17 @@ ELSE aid END AS aid
             self.cursor.execute('''UPDATE shana_series SET aid=?,verified_aid=1 WHERE id=?''',pair)
         self.conn.commit()
 
-        
+    def getAnidbSettings(self):
+        self.cursor.execute('''SELECT delay,last_update,last_seriesinfo FROM anidb_limiting WHERE id=0''')
+        result = self.cursor.fetchone()
+        return result
+
+    def anidbSetLastAdd(self,time):
+        self.cursor.execute('''UPDATE anidb_limiting SET last_update=? WHERE id=0''',time)
+        self.conn.commit()
+    def anidbSetLastInfo(self,time):
+        self.cursor.execute('''UPDATE anidb_limiting SET last_seriesinfo=? WHERE id=0''',time)
+        self.conn.commit()
+    def anidbSetDelay(self,delay):
+        self.cursor.execute('''UPDATE anidb_limiting SET delay=? WHERE id=0''',delay)
+        self.conn.commit()

@@ -15,7 +15,7 @@ import hashlib
 import os
 ##import re
 # get info from http api
-import urllib.request, urllib.error, urllib.parse
+import requests
 import contextlib
 import io
 import gzip
@@ -40,9 +40,11 @@ RETURN_CODES={
     506:'INVALID SESSION',
     }
 def anidb_series_info(aid):
+    # returns None,None if you are banned
     url='http://api.anidb.net:9001/httpapi?request=anime&client=%s&clientver=%s&protover=1&aid=%s'%(CLIENT,CLIENTVER,aid)
-    request = urllib.request.Request(url,None,FAKE_HEADERS)
-    with contextlib.closing(urllib.request.urlopen(request)) as response:
+    try:
+        response = requests.get(url,headers=FAKE_HEADERS)
+        response.raise_for_status()
         if response.info().get('Content-Encoding') == 'gzip':
                 buf = io.BytesIO(response.read())
                 data = gzip.GzipFile(fileobj=buf)
@@ -51,24 +53,30 @@ def anidb_series_info(aid):
         xmldoc = minidom.parse(data)
 ##        xmldoc = minidom.parseString(data)
         if len(xmldoc.getElementsByTagName('error')):
-            raise Exception('Anidb Error:',xmldoc.getElementsByTagName('error')[0].firstChild.nodeValue)
+            val = xmldoc.getElementsByTagName('error')[0].firstChild.nodeValue
+            if val.lower()=='banned':
+                print('series info request failed (banned by anidb)')
+                return None,None
+            raise Exception('Anidb Error:',val)
         imageurl = 'http://img7.anidb.net/pics/anime/%s'%xmldoc.getElementsByTagName('picture')[0].firstChild.nodeValue
         airdate = xmldoc.getElementsByTagName('startdate')[0].firstChild.nodeValue
         for episode in xmldoc.getElementsByTagName('epno'):
             if episode.getAttribute('type')=='1' and episode.firstChild.nodeValue=='3':
                 airdate = episode.parentNode.getElementsByTagName('airdate')[0].firstChild.nodeValue
+    except requests.Timeout as e:
+        print('series info request timed out (due to ban) (%r)'%e)
+        return None,None
     return (airdate,imageurl)
 
 def anidb_title_list():
-    request = urllib.request.Request('http://anidb.net/api/anime-titles.xml.gz',None,FAKE_HEADERS)
-    with contextlib.closing(urllib.request.urlopen(request)) as response:
-##    with contextlib.closing(open('titles.xml','rb')) as response:
-        if response.info().get('Content-Encoding') == 'gzip':
-            buf = io.BytesIO(response.read())
-            f = gzip.GzipFile(fileobj=buf)
-            data = f.read()
-        else:
-            data=response.read()
+    response = requests.get('http://anidb.net/api/anime-titles.xml.gz',headers=FAKE_HEADERS)
+    response.raise_for_status()
+    if response.info().get('Content-Encoding') == 'gzip':
+        buf = io.BytesIO(response.read())
+        f = gzip.GzipFile(fileobj=buf)
+        data = f.read()
+    else:
+        data=response.read()
             
     xmldoc = minidom.parseString(data)
     itemlist = xmldoc.getElementsByTagName('anime')

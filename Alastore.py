@@ -29,6 +29,8 @@ FULLUPDATE_TIME = 60 * 10 #once every 10 m
 INITIALUPDATE_GRACEPERIOD = 30 # this is time before the first (only) quick update
 FULLUPDATE_GRACEPERIOD = 60*5 # 5m time before first full update
 
+ANIDB_MAX_DELAY = 86400*4 # 4 days
+
 COLORSCHEME = {'background': QtGui.QColor(255,255,255),#
                'watchedh': QtGui.QColor(215,215,215),#
                'downloadedh': QtGui.QColor(255,255,255),#
@@ -203,9 +205,8 @@ class TreeModel(QtCore.QAbstractItemModel):
     def __init__(self, root, writelock, updatelock, threadpool, parent=None):
         super(TreeModel, self).__init__(parent)
         self._rootNode = root
-        self._anidb_delay = 675
-        self._last_anidb_add = 0
         self._sqlManager = sql.SQLManager()
+        self._anidb_delay,self._last_anidb_add,self._last_anidb_info = self._sqlManager.getAnidbSettings()
         self._updateData()
         self.async_writelock = asyncio.Lock()
         self.async_shanalock = asyncio.Lock()
@@ -697,14 +698,16 @@ You should only use this option if a file fails to download or is moved/deleted 
         async def dl_titlelist():
             titleUpdateTime = self._sqlManager.titleUpdateTime()
             if titleUpdateTime:
-                titleList = None
+                titleList = []
                 try:
                     titleList = await loop.run_in_executor(None,anidb.anidb_title_list) ## WEB-DEPENDENT
                 except (urllib.error.URLError,urllib.error.HTTPError,TimeoutError) as e:
                     'banned or site is down'
-                    print('failed to fetch anidb title list. (%r)'%e)
+                    print('anidb title list fetching failed, likely banned: (%r)'%e)
                     # we don't want to request again for fear of getting banned, so just wait another 24 hrs.
-                    titleList = []
+                except Exception as e:
+                    # just to be completely safe we will always wait 24 hours.
+                    print('failed to fetch anidb title list. (%r)'%e)
                 async with self.async_writelock:
                     self._sqlManager.cacheTitles(titleList)
         async def hash_files():
@@ -763,8 +766,9 @@ You should only use this option if a file fails to download or is moved/deleted 
             def internals():
                 results=[]
                 if time.time() - self._anidb_delay > self.last_anidb_add:
+                    self._last_anidb_add = time.time()
+                    self._sqlManager.anidbSetLastAdd(self._last_anidb_add)
                     with closing(anidb.anidbInterface()) as anidbLink: ## WEB-DEPENDENT
-                        self._last_anidb_add = time.time()
                         success = anidbLink.open_session(user_settings['anidb Username'],user_settings['anidb Password'])
                         if success:
                             self._anidb_delay = 675
@@ -776,10 +780,11 @@ You should only use this option if a file fails to download or is moved/deleted 
                                 logging.debug('anidb add status:%s, vars used: %s\t%s\t%s\t%s\t%s\t%s'%(aid,datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add']))
                         elif success == 0:
                             #timed out, increase delay
-                            self._anidb_delay = min( 2 * self._anidb_delay, 86400)
+                            self._anidb_delay = min( 2 * self._anidb_delay, ANIDB_MAX_DELAY)
                         else:
                             #other error, reset delay
                             self._anidb_delay = 675
+                        self._sqlManager.anidbSetDelay(self._anidb_delay)
                 return results
             if user_settings and len(toAdd) and user_settings['anidb Username'] and user_settings['anidb Password']:
                 results = await loop.run_in_executor(None, internals)
@@ -834,31 +839,43 @@ You should only use this option if a file fails to download or is moved/deleted 
             if len(allseries):
                 self.sqlDataChanged()
         async def get_series_info():
-            for aid in self._sqlManager.oneDayOldAids():
-                try:
-                    result = await loop.run_in_executor(None,anidb.anidb_series_info,aid)
-                    airdate,imgurl = result
-                    SEASONS = ['Spring','Summer','Fall','Winter']
+            if time.time() - self._anidb_delay > self._last_anidb_info:
+                self._last_anidb_info = time.time()
+                self._sqlManager.anidbSetLastInfo(self._last_anidb_info)
+                for aid in self._sqlManager.oneDayOldAids():
                     try:
-                        date = datetime.datetime.strptime(airdate,'%Y-%m-%d')
-                    except:
-                        date = datetime.datetime.strptime(airdate,'%Y-%m')
-                    sixtydays = datetime.timedelta(60)
-                    date-=sixtydays
-                    dayofyear = int(date.strftime('%j'))
-                    dayofseason = datetime.timedelta(dayofyear%91)
-                    date -= dayofseason
-                    date += sixtydays
-                    seasonindex =(dayofyear-(dayofyear%91))//91
-                    seasonname= '%s %s'%(SEASONS[seasonindex],date.strftime('%Y'))
-                    async with self.async_writelock:
-                        self._sqlManager.updateSeriesInfo(((aid,airdate,seasonname,imgurl),))
-                except Exception as e:
-                    print('anidb_series_info failed on %s [%r]'%(aid,e))
-                    async with self.async_writelock:
-                        self._sqlManager.updateSeriesInfoTime((aid,))
-                finally:
-                    await asyncio.sleep(2)
+                        result = await loop.run_in_executor(None,anidb.anidb_series_info,aid)
+                        airdate,imgurl = result
+                        if airdate == None:
+                            #series info failed due to ban, increase delay and abort.
+                            self._anidb_delay = min( 2 * self._anidb_delay, ANIDB_MAX_DELAY)
+                            self._sqlManager.anidbSetDelay(self._anidb_delay)
+                            break
+                        else:
+                            self._anidb_delay = 675
+                            self._sqlManager.anidbSetDelay(self._anidb_delay)
+                            
+                        SEASONS = ['Spring','Summer','Fall','Winter']
+                        try:
+                            date = datetime.datetime.strptime(airdate,'%Y-%m-%d')
+                        except:
+                            date = datetime.datetime.strptime(airdate,'%Y-%m')
+                        sixtydays = datetime.timedelta(60)
+                        date-=sixtydays
+                        dayofyear = int(date.strftime('%j'))
+                        dayofseason = datetime.timedelta(dayofyear%91)
+                        date -= dayofseason
+                        date += sixtydays
+                        seasonindex =(dayofyear-(dayofyear%91))//91
+                        seasonname= '%s %s'%(SEASONS[seasonindex],date.strftime('%Y'))
+                        async with self.async_writelock:
+                            self._sqlManager.updateSeriesInfo(((aid,airdate,seasonname,imgurl),))
+                    except Exception as e:
+                        print('anidb_series_info failed on %s [%r]'%(aid,e))
+                        async with self.async_writelock:
+                            self._sqlManager.updateSeriesInfoTime((aid,))
+                    finally:
+                        await asyncio.sleep(2)
         async def dl_poster_icons():
             ''' also sets the icons '''
             user_settings = self._sqlManager.getSettings()
