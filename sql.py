@@ -182,8 +182,8 @@ custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shan
         self.cursor.execute('''UPDATE user_settings SET title_update=strftime('%s', 'now') WHERE id=0''')
         self.conn.commit()
         
-    def titleUpdateTime(self):
-        self.cursor.execute('''SELECT title_update FROM user_settings WHERE title_update<strftime('%s', 'now')-?''',(TITLE_UPDATE_TIME,))
+    def titleUpdateTime(self, override = 0):
+        self.cursor.execute('''SELECT title_update FROM user_settings WHERE title_update<strftime('%s', 'now')-?''',(max(override,TITLE_UPDATE_TIME),))
         return self.cursor.fetchone()
         
     def hideSeries(self, id):

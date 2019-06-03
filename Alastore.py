@@ -696,7 +696,7 @@ You should only use this option if a file fails to download or is moved/deleted 
     
     async def do_update(self, quick=False):
         async def dl_titlelist():
-            titleUpdateTime = self._sqlManager.titleUpdateTime()
+            titleUpdateTime = self._sqlManager.titleUpdateTime(override=self._anidb_delay)
             if titleUpdateTime:
                 titleList = []
                 try:
@@ -765,29 +765,34 @@ You should only use this option if a file fails to download or is moved/deleted 
             results=[]
             def internals():
                 results=[]
+                delay = self._anidb_delay
+                with closing(anidb.anidbInterface()) as anidbLink: ## WEB-DEPENDENT
+                    success = anidbLink.open_session(user_settings['anidb Username'],user_settings['anidb Password'])
+                    if success:
+                        delay = 675
+                        for datum in toAdd:
+                            aid=anidbLink.add_file(datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add'])
+                            time.sleep(2) # don't want to get banned somehow
+                            results.append((aid,datum['path'],datum['force_generic_add'],datum['aid'],datum['id']))
+                            # these match with: status, filepath, aid, subgroup, epnum, ed2k, do_generic_add
+                            logging.debug('anidb add status:%s, vars used: %s\t%s\t%s\t%s\t%s\t%s'%(aid,datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add']))
+                    elif success == 0:
+                        #timed out, increase delay
+                        delay = min( 2 * delay, ANIDB_MAX_DELAY)
+                    else:
+                        #other error, reset delay
+                        delay = 675
+                return results,delay
+            
+            if user_settings and len(toAdd) and user_settings['anidb Username'] and user_settings['anidb Password']:
                 if time.time() - self._anidb_delay > self.last_anidb_add:
                     self._last_anidb_add = time.time()
-                    self._sqlManager.anidbSetLastAdd(self._last_anidb_add)
-                    with closing(anidb.anidbInterface()) as anidbLink: ## WEB-DEPENDENT
-                        success = anidbLink.open_session(user_settings['anidb Username'],user_settings['anidb Password'])
-                        if success:
-                            self._anidb_delay = 675
-                            for datum in toAdd:
-                                aid=anidbLink.add_file(datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add'])
-                                time.sleep(2) # don't want to get banned somehow
-                                results.append((aid,datum['path'],datum['force_generic_add'],datum['aid'],datum['id']))
-                                # these match with: status, filepath, aid, subgroup, epnum, ed2k, do_generic_add
-                                logging.debug('anidb add status:%s, vars used: %s\t%s\t%s\t%s\t%s\t%s'%(aid,datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add']))
-                        elif success == 0:
-                            #timed out, increase delay
-                            self._anidb_delay = min( 2 * self._anidb_delay, ANIDB_MAX_DELAY)
-                        else:
-                            #other error, reset delay
-                            self._anidb_delay = 675
-                        self._sqlManager.anidbSetDelay(self._anidb_delay)
-                return results
-            if user_settings and len(toAdd) and user_settings['anidb Username'] and user_settings['anidb Password']:
-                results = await loop.run_in_executor(None, internals)
+                    async with self.async_writelock:
+                        self._sqlManager.anidbSetLastAdd(self._last_anidb_add)
+                    results,delay = await loop.run_in_executor(None, internals)
+                    self._anidb_delay = delay
+                    async with self.async_writelock:
+                        self._sqlManager.anidbSetDelay(delay)
 
             for datum in results:
                 async with self.async_writelock:
@@ -841,7 +846,8 @@ You should only use this option if a file fails to download or is moved/deleted 
         async def get_series_info():
             if time.time() - self._anidb_delay > self._last_anidb_info:
                 self._last_anidb_info = time.time()
-                self._sqlManager.anidbSetLastInfo(self._last_anidb_info)
+                async with self.async_writelock:
+                    self._sqlManager.anidbSetLastInfo(self._last_anidb_info)
                 for aid in self._sqlManager.oneDayOldAids():
                     try:
                         result = await loop.run_in_executor(None,anidb.anidb_series_info,aid)
@@ -849,11 +855,13 @@ You should only use this option if a file fails to download or is moved/deleted 
                         if airdate == None:
                             #series info failed due to ban, increase delay and abort.
                             self._anidb_delay = min( 2 * self._anidb_delay, ANIDB_MAX_DELAY)
-                            self._sqlManager.anidbSetDelay(self._anidb_delay)
+                            async with self.async_writelock:
+                                self._sqlManager.anidbSetDelay(self._anidb_delay)
                             break
                         else:
                             self._anidb_delay = 675
-                            self._sqlManager.anidbSetDelay(self._anidb_delay)
+                            async with self.async_writelock:
+                                self._sqlManager.anidbSetDelay(self._anidb_delay)
                             
                         SEASONS = ['Spring','Summer','Fall','Winter']
                         try:
