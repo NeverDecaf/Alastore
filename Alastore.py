@@ -772,7 +772,6 @@ You should only use this option if a file fails to download or is moved/deleted 
                         delay = 675
                         for datum in toAdd:
                             aid=anidbLink.add_file(datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add'],datum['added_on'])
-                            time.sleep(2) # don't want to get banned somehow
                             results.append((aid,datum['path'],datum['force_generic_add'],datum['aid'],datum['id']))
                             # these match with: status, filepath, aid, subgroup, epnum, ed2k, do_generic_add
                             logging.debug('anidb add status:%s, vars used: %s\t%s\t%s\t%s\t%s\t%s\t%s'%(aid,datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add'],datum['added_on']))
@@ -795,11 +794,11 @@ You should only use this option if a file fails to download or is moved/deleted 
                         self._sqlManager.anidbSetDelay(delay)
 
             for datum in results:
-                async with self.async_writelock:
-                    self._sqlManager.removeParsed(datum[1],forceadded=datum[2],aid=datum[3])
-                if not datum[3] and datum[0]>0: # if an aid did not exist but was returned by add
+                if datum[0]:
                     async with self.async_writelock:
-                        self._sqlManager.updateAids(((datum[0],datum[4]),)) # we most likely don't need to update data for this...
+                        self._sqlManager.removeParsed(datum[1],forceadded=datum[2],aid=datum[3])
+                        if not datum[3] and datum[0]>0: # if an aid did not exist but was returned by add
+                            self._sqlManager.updateAids(((datum[0],datum[4]),)) # we most likely don't need to update data for this...
 
         async def check_file_changes():
             # this is the file update (the part that should run when you pick the context menu option)

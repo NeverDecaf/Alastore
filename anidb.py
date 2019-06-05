@@ -16,7 +16,6 @@ import os
 ##import re
 # get info from http api
 import requests
-import contextlib
 import io
 from xml.dom import minidom
 from functools import reduce
@@ -398,4 +397,10 @@ if __name__ == '__main__':
 ##    loop = asyncio.get_event_loop()
 ##    loop.run_until_complete(say())
 ##    loop.close()
-    print(anidb_series_info(1002))
+    from contextlib import closing
+    files = [r'']
+    with closing(anidbInterface()) as a:
+        a.open_session(username,password)
+        for path in files:
+            hashe = a.ed2k_hash(path)
+            a.add_file(None,None,None,None,hashe[0],0,None)
