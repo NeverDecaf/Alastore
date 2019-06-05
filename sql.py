@@ -105,7 +105,7 @@ class SQLManager:
                  (id integer PRIMARY KEY DEFAULT 0,
                  delay real DEFAULT 675,
                  last_update real DEFAULT 0,
-                 last_seriesinfo read DEFAULT 0)''')
+                 last_seriesinfo real DEFAULT 0)''')
         self.cursor.execute('''INSERT OR IGNORE INTO anidb_limiting (id) VALUES (0)''')
         self.conn.commit()
 
@@ -413,11 +413,11 @@ ELSE aid END AS aid
         return result
 
     def anidbSetLastAdd(self,time):
-        self.cursor.execute('''UPDATE anidb_limiting SET last_update=? WHERE id=0''',time)
+        self.cursor.execute('''UPDATE anidb_limiting SET last_update=? WHERE id=0''',(time,))
         self.conn.commit()
     def anidbSetLastInfo(self,time):
-        self.cursor.execute('''UPDATE anidb_limiting SET last_seriesinfo=? WHERE id=0''',time)
+        self.cursor.execute('''UPDATE anidb_limiting SET last_seriesinfo=? WHERE id=0''',(time,))
         self.conn.commit()
     def anidbSetDelay(self,delay):
-        self.cursor.execute('''UPDATE anidb_limiting SET delay=? WHERE id=0''',delay)
+        self.cursor.execute('''UPDATE anidb_limiting SET delay=? WHERE id=0''',(delay,))
         self.conn.commit()
