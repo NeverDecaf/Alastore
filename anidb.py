@@ -14,10 +14,12 @@ import time
 import hashlib
 import os
 ##import re
+import gzip
 # get info from http api
 import requests
 import io
 from xml.dom import minidom
+from xml.parsers.expat import ExpatError
 from functools import reduce
 GLOBAL_ANIDB_TIMER = time.time()
 ANIDB_RATE_LIMIT = 2.5 # specified as 2s but add a bit to be safe.
@@ -73,7 +75,12 @@ def anidb_title_list():
     GLOBAL_ANIDB_TIMER = time.time()
     response.raise_for_status()
     response.encoding = 'utf-8' # anidb default
-    xmldoc = minidom.parseString(response.text)
+    try:
+        xmldoc = minidom.parseString(response.text)
+    except ExpatError:
+        # requests does not gzip deflate this, so we must do it manually. (perhaps its a header error, hard to check without getting banned.)
+        xmldoc = minidom.parseString(gzip.decompress(response.content)) 
+
     itemlist = xmldoc.getElementsByTagName('anime')
     titles=[]
     for series in itemlist:
@@ -397,10 +404,14 @@ if __name__ == '__main__':
 ##    loop = asyncio.get_event_loop()
 ##    loop.run_until_complete(say())
 ##    loop.close()
-    from contextlib import closing
-    files = [r'']
-    with closing(anidbInterface()) as a:
-        a.open_session(username,password)
-        for path in files:
-            hashe = a.ed2k_hash(path)
-            a.add_file(None,None,None,None,hashe[0],0,None)
+
+##    print(len(anidb_title_list()))
+    
+##    from contextlib import closing
+##    files = [r'']
+##    with closing(anidbInterface()) as a:
+##        a.open_session(username,password)
+##        for path in files:
+##            hashe = a.ed2k_hash(path)
+##            a.add_file(None,None,None,None,hashe[0],0,None)
+    
