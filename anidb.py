@@ -18,7 +18,6 @@ import os
 import requests
 import contextlib
 import io
-import gzip
 from xml.dom import minidom
 from functools import reduce
 FAKE_HEADERS={
@@ -45,13 +44,8 @@ def anidb_series_info(aid):
     try:
         response = requests.get(url,headers=FAKE_HEADERS)
         response.raise_for_status()
-        if response.info().get('Content-Encoding') == 'gzip':
-                buf = io.BytesIO(response.read())
-                data = gzip.GzipFile(fileobj=buf)
-        else:
-                data=response
-        xmldoc = minidom.parse(data)
-##        xmldoc = minidom.parseString(data)
+        response.encoding = 'utf-8' # anidb default
+        xmldoc = minidom.parseString(response.text)
         if len(xmldoc.getElementsByTagName('error')):
             val = xmldoc.getElementsByTagName('error')[0].firstChild.nodeValue
             if val.lower()=='banned':
@@ -71,14 +65,8 @@ def anidb_series_info(aid):
 def anidb_title_list():
     response = requests.get('http://anidb.net/api/anime-titles.xml.gz',headers=FAKE_HEADERS)
     response.raise_for_status()
-    if response.info().get('Content-Encoding') == 'gzip':
-        buf = io.BytesIO(response.read())
-        f = gzip.GzipFile(fileobj=buf)
-        data = f.read()
-    else:
-        data=response.read()
-            
-    xmldoc = minidom.parseString(data)
+    response.encoding = 'utf-8' # anidb default
+    xmldoc = minidom.parseString(response.text)
     itemlist = xmldoc.getElementsByTagName('anime')
     titles=[]
     for series in itemlist:
