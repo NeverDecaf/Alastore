@@ -785,7 +785,7 @@ You should only use this option if a file fails to download or is moved/deleted 
                 return results,delay
             
             if user_settings and len(toAdd) and user_settings['anidb Username'] and user_settings['anidb Password']:
-                if time.time() - self._anidb_delay > self.last_anidb_add:
+                if time.time() - self._anidb_delay > self._last_anidb_add:
                     self._last_anidb_add = time.time()
                     async with self.async_writelock:
                         self._sqlManager.anidbSetLastAdd(self._last_anidb_add)

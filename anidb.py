@@ -20,6 +20,8 @@ import contextlib
 import io
 from xml.dom import minidom
 from functools import reduce
+GLOBAL_ANIDB_TIMER = time.time()
+ANIDB_RATE_LIMIT = 2.5 # specified as 2s but add a bit to be safe.
 FAKE_HEADERS={
 'Accept-Charset':'ISO-8859-1,utf-8;q=0.7,*;q=0.3',
 'Accept-Encoding':'gzip',
@@ -39,10 +41,13 @@ RETURN_CODES={
     506:'INVALID SESSION',
     }
 def anidb_series_info(aid):
+    global GLOBAL_ANIDB_TIMER,ANIDB_RATE_LIMIT
     # returns None,None if you are banned
     url='http://api.anidb.net:9001/httpapi?request=anime&client=%s&clientver=%s&protover=1&aid=%s'%(CLIENT,CLIENTVER,aid)
     try:
+        time.sleep(max(ANIDB_RATE_LIMIT-time.time()+GLOBAL_ANIDB_TIMER,0))
         response = requests.get(url,headers=FAKE_HEADERS)
+        GLOBAL_ANIDB_TIMER = time.time()
         response.raise_for_status()
         response.encoding = 'utf-8' # anidb default
         xmldoc = minidom.parseString(response.text)
@@ -63,7 +68,10 @@ def anidb_series_info(aid):
     return (airdate,imageurl)
 
 def anidb_title_list():
+    global GLOBAL_ANIDB_TIMER,ANIDB_RATE_LIMIT
+    time.sleep(max(ANIDB_RATE_LIMIT-time.time()+GLOBAL_ANIDB_TIMER,0))
     response = requests.get('http://anidb.net/api/anime-titles.xml.gz',headers=FAKE_HEADERS)
+    GLOBAL_ANIDB_TIMER = time.time()
     response.raise_for_status()
     response.encoding = 'utf-8' # anidb default
     xmldoc = minidom.parseString(response.text)
@@ -201,15 +209,17 @@ class anidbInterface:
     ##############
     # returns session key
     def _auth(self,USERNAME,PASSWORD):
+        global GLOBAL_ANIDB_TIMER,ANIDB_RATE_LIMIT
         self.SK=None
         if not self.socket:
             return None
         '''auths with anidb using passed credentials and socket. returns None on failure.'''
         data = 'AUTH user='+USERNAME+'&pass='+PASSWORD+'&protover=3&client=%s&clientver=%s'%(UDPCLIENT,UDPCLIENTVER)
+        time.sleep(max(ANIDB_RATE_LIMIT-time.time()+GLOBAL_ANIDB_TIMER,0))
         self.socket.sendall(data.encode('utf8'))
+        GLOBAL_ANIDB_TIMER = time.time()
         
         buf = self.socket.recv(2048).decode('utf8')
-        time.sleep(2)
         if str(buf).split(' ')[0] != '200':
             return None
         self.SK=str(buf).split(' ')[1]
@@ -219,14 +229,16 @@ class anidbInterface:
     #### ADD #####
     ##############
     def _add(self,full_ed2k,aid=None,group=None,epno=None,do_generic_add=0):
+        global GLOBAL_ANIDB_TIMER,ANIDB_RATE_LIMIT
         '''Adds the given file to mylist, on failure attempts to add a generic file. returns None on failure.'''
         ed2k=full_ed2k.split('|')[4]
         filesize=full_ed2k.split('|')[3]
         data = 'MYLISTADD size='+str(filesize)+'&ed2k='+ed2k+'&state='+str(self.STATE)+'&viewed='+str(self.VIEWED)+'&s='+self.SK
+        time.sleep(max(ANIDB_RATE_LIMIT-time.time()+GLOBAL_ANIDB_TIMER,0))
         self.socket.sendall(data.encode('utf8'))
+        GLOBAL_ANIDB_TIMER = time.time()
         
         buf = self.socket.recv(2048).decode('utf8')
-        time.sleep(2)
         if str(buf).split(' ')[0] =='320':
             if aid:
                 if DEBUG_ADD_CHAIN:
@@ -260,24 +272,28 @@ class anidbInterface:
     #### CHECK FOR (GENERIC) FILE IN LIST #####
     ###########################################
     def _check_exists(self,aid,epno):
+        global GLOBAL_ANIDB_TIMER,ANIDB_RATE_LIMIT
         '''Checks for a file by aid and episode number. used to verify generic adds.'''
         data = 'MYLIST aid='+str(aid)+'&epno='+str(epno)+'&s='+self.SK
+        time.sleep(max(ANIDB_RATE_LIMIT-time.time()+GLOBAL_ANIDB_TIMER,0))
         self.socket.sendall(data.encode('utf8'))
+        GLOBAL_ANIDB_TIMER = time.time()
         
         buf = self.socket.recv(2048).decode('utf8')
-        time.sleep(2)
         return str(buf).split(' ')[0] !='321' # 321 is the code for NO SUCH ENTRY
         
     ##############################
     #### GET AID FROM MYLIST #####
     ##############################
     def _get_aid(self,lid):
+        global GLOBAL_ANIDB_TIMER,ANIDB_RATE_LIMIT
         '''Retreives the aid for the file in mylist referenced by list id.'''
         data = 'MYLIST lid='+str(lid)+'&s='+self.SK
+        time.sleep(max(ANIDB_RATE_LIMIT-time.time()+GLOBAL_ANIDB_TIMER,0))
         self.socket.sendall(data.encode('utf8'))
+        GLOBAL_ANIDB_TIMER = time.time()
         
         buf = self.socket.recv(2048).decode('utf8')
-        time.sleep(2)
         if str(buf).split(' ')[0] =='221':
             #{int4 lid}|{int4 fid}|{int4 eid}|{int4 aid}|{int4 gid}|{int4 date}|{int2 state}|{int4 viewdate}|{str storage}|{str source}|{str other}|{int2 filestate}
             return str(buf).split('|')[3]#this should be the aid.
@@ -287,6 +303,7 @@ class anidbInterface:
     ######################
 
     def _add_generic(self,aid,group,epno,do_generic_add):
+        global GLOBAL_ANIDB_TIMER,ANIDB_RATE_LIMIT
         '''Adds the given generic file to mylist. returns None on failure.'''
         ''' IMPORTANT TO NOTE: when doing MYLISTADD by aid instead of file(ed2k) a lid is NOT returned, instead the number of files added is returned'''
         ''' EVEN MORE IMPORTANT NOTE:
@@ -307,12 +324,13 @@ class anidbInterface:
 ##        'try to do a group name add first'
         if group:
             data = 'MYLISTADD aid='+str(aid)+'&gname='+str(group)+'&epno='+str(epno)+'&state='+str(self.STATE)+'&viewed='+str(self.VIEWED)+'&s='+self.SK
+            time.sleep(max(ANIDB_RATE_LIMIT-time.time()+GLOBAL_ANIDB_TIMER,0))
             self.socket.sendall(data.encode('utf8'))
+            GLOBAL_ANIDB_TIMER = time.time()
             
             buf = self.socket.recv(2048).decode('utf8')
             if DEBUG_ADD_CHAIN:
                     print('result of generic add(1):',buf)
-            time.sleep(2)
             if str(buf).split(' ')[0] =='210':
                 added=str(buf).split('\n')[1]
                 if added=='1':# this will be 0 if the add failed, despite the code 210 indicating a success (of 0 files added)
@@ -326,10 +344,11 @@ class anidbInterface:
 
         if DEBUG_ADD_CHAIN:
             print('attempting generic add (w/o gname)')
+        time.sleep(max(ANIDB_RATE_LIMIT-time.time()+GLOBAL_ANIDB_TIMER,0))
         self.socket.sendall(data.encode('utf8'))
+        GLOBAL_ANIDB_TIMER = time.time()
         
         buf = self.socket.recv(2048).decode('utf8')
-        time.sleep(2)
         if DEBUG_ADD_CHAIN:
                 print('result of generic add(2):',buf)
         if str(buf).split(' ')[0] =='210':
@@ -342,12 +361,15 @@ class anidbInterface:
     ### LOGOUT ###
     ##############
     def _logout(self):
+        global GLOBAL_ANIDB_TIMER,ANIDB_RATE_LIMIT
         '''Log out of mylist'''
         if not self.SK:
             return None
         data = 'LOGOUT s='+self.SK
         self.SK=None
+        time.sleep(max(ANIDB_RATE_LIMIT-time.time()+GLOBAL_ANIDB_TIMER,0))
         self.socket.sendall(data.encode('utf8'))
+        GLOBAL_ANIDB_TIMER = time.time()
         buf = self.socket.recv(2048).decode('utf8')
         if str(buf).split(' ')[0] =='203':
             return 1 # success
@@ -360,13 +382,14 @@ class anidbInterface:
         self.socket=None
 
 if __name__ == '__main__':
-    import asyncio
-    titleList=anidb_title_list()
-    import sql
-    _sqlManager = sql.SQLManager()
-    async def say():
-        await _sqlManager.cacheTitles(titleList)
-
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(say())
-    loop.close()
+##    import asyncio
+##    titleList=anidb_title_list()
+##    import sql
+##    _sqlManager = sql.SQLManager()
+##    async def say():
+##        await _sqlManager.cacheTitles(titleList)
+##
+##    loop = asyncio.get_event_loop()
+##    loop.run_until_complete(say())
+##    loop.close()
+    print(anidb_series_info(1002))
