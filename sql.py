@@ -388,7 +388,7 @@ SELECT aid FROM (
         self.cursor.execute('''SELECT path,
 CASE WHEN verified_aid=0 AND last_update>strftime('%s', 'now')-? THEN NULL
 ELSE aid END AS aid
-,subgroup AS `group`,episode AS epno,ed2k,parse_data.id AS id,added_on<strftime('%s', 'now')-? as do_generic_add, verified_aid=0 AND last_update<strftime('%s', 'now')-? AS force_generic_add
+,subgroup AS `group`,added_on,episode AS epno,ed2k,parse_data.id AS id,added_on<strftime('%s', 'now')-? as do_generic_add, verified_aid=0 AND last_update<strftime('%s', 'now')-? AS force_generic_add
                                 FROM parse_data JOIN shana_series WHERE shana_series.id=parse_data.id AND ed2k NOT NULL AND strftime('%s', 'now') - 2*3600*((strftime('%s', 'now')-added_on)/86400+2) > last_add_attempt''', (LAST_UPDATE_TIME,ANIDB_WAIT_TIME,LAST_UPDATE_TIME))
         result = self.cursor.fetchall()       
         for file in result:

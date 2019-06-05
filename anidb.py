@@ -139,7 +139,7 @@ class anidbInterface:
 
     'should return -1 or aid on success'
     'None or 0 on failure'
-    def add_file(self,path,aid,group,epno,ed2k,do_generic_add):
+    def add_file(self,path,aid,group,epno,ed2k,do_generic_add,viewdate):
         ''' path should be the full path '''
         if not self.SK:
             return None #there was a problem somewhere in logging in but we'll just ignore it and come back later
@@ -148,8 +148,8 @@ class anidbInterface:
 ##        while time.time()-hashingisslow<2:pass
         try:
             if DEBUG_ADD_CHAIN:
-                print('adding with vars:',path,aid,group,epno,ed2k,do_generic_add)
-            aid=self._add(ed2k,aid,group,epno,do_generic_add)
+                print('adding with vars:',path,aid,group,epno,ed2k,do_generic_add,viewdate)
+            aid=self._add(ed2k,aid,group,epno,do_generic_add,viewdate)
         except Exception as e:#socket.error,e:
             print(("error with anidb add: %r"%e))
             return None
@@ -228,12 +228,14 @@ class anidbInterface:
     ##############
     #### ADD #####
     ##############
-    def _add(self,full_ed2k,aid=None,group=None,epno=None,do_generic_add=0):
+    def _add(self,full_ed2k,aid=None,group=None,epno=None,do_generic_add=0,viewdate=None):
         global GLOBAL_ANIDB_TIMER,ANIDB_RATE_LIMIT
         '''Adds the given file to mylist, on failure attempts to add a generic file. returns None on failure.'''
         ed2k=full_ed2k.split('|')[4]
         filesize=full_ed2k.split('|')[3]
-        data = 'MYLISTADD size='+str(filesize)+'&ed2k='+ed2k+'&state='+str(self.STATE)+'&viewed='+str(self.VIEWED)+'&s='+self.SK
+        data = 'MYLISTADD size={}&ed2k={}&state={}&viewed={}&s={}'.format(filesize,ed2k,self.STATE,self.VIEWED,self.SK)
+        if viewdate:
+            data += '&viewdate={}'.format(viewdate)
         time.sleep(max(ANIDB_RATE_LIMIT-time.time()+GLOBAL_ANIDB_TIMER,0))
         self.socket.sendall(data.encode('utf8'))
         GLOBAL_ANIDB_TIMER = time.time()
@@ -242,8 +244,8 @@ class anidbInterface:
         if str(buf).split(' ')[0] =='320':
             if aid:
                 if DEBUG_ADD_CHAIN:
-                    print('NO SUCH FILE, performing generic add with vars:',aid,group,epno,do_generic_add)
-                return self._add_generic(aid,group,epno,do_generic_add)
+                    print('NO SUCH FILE, performing generic add with vars:',aid,group,epno,do_generic_add,viewdate)
+                return self._add_generic(aid,group,epno,do_generic_add,viewdate)
             else:
                 if DEBUG_ADD_CHAIN:
                     print('No aid provided, returning none as generic add cannot be done without aid.')
@@ -302,7 +304,7 @@ class anidbInterface:
     #### ADD GENERIC #####
     ######################
 
-    def _add_generic(self,aid,group,epno,do_generic_add):
+    def _add_generic(self,aid,group,epno,do_generic_add,viewdate):
         global GLOBAL_ANIDB_TIMER,ANIDB_RATE_LIMIT
         '''Adds the given generic file to mylist. returns None on failure.'''
         ''' IMPORTANT TO NOTE: when doing MYLISTADD by aid instead of file(ed2k) a lid is NOT returned, instead the number of files added is returned'''
@@ -314,7 +316,7 @@ class anidbInterface:
             Because of this, we must first check to see if the file already exists in mylist before attempting any kind of generic add.'''
         
         if DEBUG_ADD_CHAIN:
-            print('adding generic with vars:',aid,group,epno,do_generic_add)
+            print('adding generic with vars:',aid,group,epno,do_generic_add,viewdate)
 
         if self._check_exists(aid,epno):
             if DEBUG_ADD_CHAIN:
@@ -323,7 +325,9 @@ class anidbInterface:
         
 ##        'try to do a group name add first'
         if group:
-            data = 'MYLISTADD aid='+str(aid)+'&gname='+str(group)+'&epno='+str(epno)+'&state='+str(self.STATE)+'&viewed='+str(self.VIEWED)+'&s='+self.SK
+            data = 'MYLISTADD aid={}&gname={}&epno={}&state={}&viewed={}&s={}'.format(aid,group,epno,self.STATE,self.VIEWED,self.SK)
+            if viewdate:
+                data+= '&viewdate={}'.format(viewdate)
             time.sleep(max(ANIDB_RATE_LIMIT-time.time()+GLOBAL_ANIDB_TIMER,0))
             self.socket.sendall(data.encode('utf8'))
             GLOBAL_ANIDB_TIMER = time.time()
@@ -338,7 +342,9 @@ class anidbInterface:
         
 ##        'if the gname add failed (group not in anidb) we will try a simple generic add'
         if do_generic_add:
-            data = 'MYLISTADD aid='+str(aid)+'&generic=1&epno='+str(epno)+'&state='+str(self.STATE)+'&viewed='+str(self.VIEWED)+'&s='+self.SK
+            data = 'MYLISTADD aid={}&generic=1&epno={}&state={}&viewed={}&s={}'.format(aid,epno,self.STATE,self.VIEWED,self.SK)
+            if viewdate:
+                data+= '&viewdate={}'.format(viewdate)
         else:
             return None#failure, not time yet for generic add
 

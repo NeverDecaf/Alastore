@@ -771,11 +771,11 @@ You should only use this option if a file fails to download or is moved/deleted 
                     if success:
                         delay = 675
                         for datum in toAdd:
-                            aid=anidbLink.add_file(datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add'])
+                            aid=anidbLink.add_file(datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add'],datum['added_on'])
                             time.sleep(2) # don't want to get banned somehow
                             results.append((aid,datum['path'],datum['force_generic_add'],datum['aid'],datum['id']))
                             # these match with: status, filepath, aid, subgroup, epnum, ed2k, do_generic_add
-                            logging.debug('anidb add status:%s, vars used: %s\t%s\t%s\t%s\t%s\t%s'%(aid,datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add']))
+                            logging.debug('anidb add status:%s, vars used: %s\t%s\t%s\t%s\t%s\t%s\t%s'%(aid,datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add'],datum['added_on']))
                     elif success == 0:
                         #timed out, increase delay
                         delay = min( 2 * delay, ANIDB_MAX_DELAY)
