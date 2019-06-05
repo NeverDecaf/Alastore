@@ -407,11 +407,11 @@ if __name__ == '__main__':
 
 ##    print(len(anidb_title_list()))
     
-##    from contextlib import closing
-##    files = [r'']
-##    with closing(anidbInterface()) as a:
-##        a.open_session(username,password)
-##        for path in files:
-##            hashe = a.ed2k_hash(path)
-##            a.add_file(None,None,None,None,hashe[0],0,None)
+    from contextlib import closing
+    files = [r'']
+    with closing(anidbInterface()) as a:
+        a.open_session(username,password)
+        for path in files:
+            hashe = a.ed2k_hash(path)
+            a.add_file(None,None,None,None,hashe[0],0,None)
     
