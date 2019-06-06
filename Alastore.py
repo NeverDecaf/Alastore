@@ -8,7 +8,7 @@ import os
 import re
 import io
 import torrentprogress
-import urllib
+from requests.exceptions import ConnectionError
 import anidb
 import datetime
 import makeico
@@ -28,7 +28,7 @@ import errno
 FULLUPDATE_TIME = 60 * 10 #once every 10 m
 INITIALUPDATE_GRACEPERIOD = 30 # this is time before the first (only) quick update
 FULLUPDATE_GRACEPERIOD = 60*5 # 5m time before first full update
-
+ANIDB_DEFAULT_DELAY = 675
 ANIDB_MAX_DELAY = 86400*4 # 4 days
 
 COLORSCHEME = {'background': QtGui.QColor(255,255,255),#
@@ -696,20 +696,22 @@ You should only use this option if a file fails to download or is moved/deleted 
     
     async def do_update(self, quick=False):
         async def dl_titlelist():
-            titleUpdateTime = self._sqlManager.titleUpdateTime(override=self._anidb_delay)
+            async with self.async_writelock:
+                titleUpdateTime = self._sqlManager.titleUpdateTime(override=self._anidb_delay)
             if titleUpdateTime:
                 titleList = []
                 try:
                     titleList = await loop.run_in_executor(None,anidb.anidb_title_list) ## WEB-DEPENDENT
-                except (urllib.error.URLError,urllib.error.HTTPError,TimeoutError) as e:
+                except (ConnectionError,TimeoutError,ConnectionRefusedError) as e:
                     'banned or site is down'
                     print('anidb title list fetching failed, likely banned: (%r)'%e)
                     # we don't want to request again for fear of getting banned, so just wait another 24 hrs.
                 except Exception as e:
                     # just to be completely safe we will always wait 24 hours.
                     print('failed to fetch anidb title list. (%r)'%e)
-                async with self.async_writelock:
-                    self._sqlManager.cacheTitles(titleList)
+                finally:
+                    async with self.async_writelock:
+                        self._sqlManager.cacheTitles(titleList)
         async def hash_files():
             toHash = self._sqlManager.getUnhashed()
             hasherrors=0
@@ -769,7 +771,7 @@ You should only use this option if a file fails to download or is moved/deleted 
                 with closing(anidb.anidbInterface()) as anidbLink: ## WEB-DEPENDENT
                     success = anidbLink.open_session(user_settings['anidb Username'],user_settings['anidb Password'])
                     if success:
-                        delay = 675
+                        delay = ANIDB_DEFAULT_DELAY
                         for datum in toAdd:
                             aid=anidbLink.add_file(datum['path'],datum['aid'],datum['group'],datum['epno'],datum['ed2k'],datum['do_generic_add'],datum['added_on'])
                             results.append((aid,datum['path'],datum['force_generic_add'],datum['aid'],datum['id']))
@@ -780,7 +782,7 @@ You should only use this option if a file fails to download or is moved/deleted 
                         delay = min( 2 * delay, ANIDB_MAX_DELAY)
                     else:
                         #other error, reset delay
-                        delay = 675
+                        delay = ANIDB_DEFAULT_DELAY
                 return results,delay
             
             if user_settings and len(toAdd) and user_settings['anidb Username'] and user_settings['anidb Password']:
@@ -858,7 +860,7 @@ You should only use this option if a file fails to download or is moved/deleted 
                                 self._sqlManager.anidbSetDelay(self._anidb_delay)
                             break
                         else:
-                            self._anidb_delay = 675
+                            self._anidb_delay = ANIDB_DEFAULT_DELAY
                             async with self.async_writelock:
                                 self._sqlManager.anidbSetDelay(self._anidb_delay)
                             
@@ -886,7 +888,7 @@ You should only use this option if a file fails to download or is moved/deleted 
         async def dl_poster_icons():
             ''' also sets the icons '''
             user_settings = self._sqlManager.getSettings()
-            if os.name == 'nt' and user_settings['Poster Icons']: # only works on windows.
+            if os.name == 'nt' and user_settings['Poster Icons'] and self._anidb_delay <= ANIDB_DEFAULT_DELAY: # only works on windows.
                 newIcons = self._sqlManager.getOutdatedPosters()
 
                 '''hashes the selected files, also downloads poster art if applicable'''
@@ -937,7 +939,7 @@ You should only use this option if a file fails to download or is moved/deleted 
                         try:
                             # add parsed files to anidb, very finnicky so we wrap it in a try
                             await anidb_adds()
-                        except (ConnectionRefusedError, TimeoutError) as e:
+                        except (ConnectionRefusedError, TimeoutError, ConnectionError) as e:
                             logging.error('AniDB add failed (%r)'%e)
 
                         # attempt to title match one unconfirmed aid, may take some time depending on computer. cant really be run async without creating a new sql connection.

@@ -9,7 +9,6 @@ UDPCLIENT='alastore'
 UDPCLIENTVER='1'
 DEBUG_ADD_CHAIN=0 # set to 1 to debug mylistadd failures
 import socket
-import sys
 import time
 import hashlib
 import os
@@ -17,11 +16,13 @@ import os
 import gzip
 # get info from http api
 import requests
-import io
 from xml.dom import minidom
 from xml.parsers.expat import ExpatError
 from functools import reduce
+from PIL import Image
+from io import BytesIO
 GLOBAL_ANIDB_TIMER = time.time()
+IMG_URL_BASE = 'http://img7.anidb.net/pics/anime/{}'
 ANIDB_RATE_LIMIT = 2.5 # specified as 2s but add a bit to be safe.
 FAKE_HEADERS={
 'Accept-Charset':'ISO-8859-1,utf-8;q=0.7,*;q=0.3',
@@ -58,7 +59,7 @@ def anidb_series_info(aid):
                 print('series info request failed (banned by anidb)')
                 return None,None
             raise Exception('Anidb Error:',val)
-        imageurl = 'http://img7.anidb.net/pics/anime/%s'%xmldoc.getElementsByTagName('picture')[0].firstChild.nodeValue
+        imageurl = IMG_URL_BASE.format(xmldoc.getElementsByTagName('picture')[0].firstChild.nodeValue)
         airdate = xmldoc.getElementsByTagName('startdate')[0].firstChild.nodeValue
         for episode in xmldoc.getElementsByTagName('epno'):
             if episode.getAttribute('type')=='1' and episode.firstChild.nodeValue=='3':
@@ -79,8 +80,8 @@ def anidb_title_list():
         xmldoc = minidom.parseString(response.text)
     except ExpatError:
         # requests does not gzip deflate this, so we must do it manually. (perhaps its a header error, hard to check without getting banned.)
-        xmldoc = minidom.parseString(gzip.decompress(response.content)) 
-
+        xmldoc = minidom.parseString(gzip.decompress(response.content))
+    
     itemlist = xmldoc.getElementsByTagName('anime')
     titles=[]
     for series in itemlist:
@@ -93,6 +94,15 @@ def anidb_title_list():
                 if lang in ['x-jat','en','x-unk']:#x-unk is unknown... prob the default
                     titles.append((aid,ttype,lang,title))
     return titles
+
+def anidb_dl_poster_art(imageurl):
+    global GLOBAL_ANIDB_TIMER,ANIDB_RATE_LIMIT
+    time.sleep(max(ANIDB_RATE_LIMIT-time.time()+GLOBAL_ANIDB_TIMER,0))
+    response = requests.get(imageurl,headers=FAKE_HEADERS)
+    GLOBAL_ANIDB_TIMER = time.time()
+    lazyopen = Image.open(BytesIO(response.content))
+    lazyopen.load() # fix for a bug in PIL 1.1.7
+    return lazyopen
         
 class anidbInterface:
     LOCALPORT = 30575
@@ -124,7 +134,7 @@ class anidbInterface:
     def open_session(self,user,passw):
         if user==None or passw==None:
             self.SK=None
-            socket=None
+            self.socket=None
             return None
         try:
             if not self._auth(user,passw):

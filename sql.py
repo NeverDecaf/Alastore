@@ -175,11 +175,12 @@ custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shan
             d[r['title']].append(r)
         return d
     
-    def cacheTitles(self, titles):
-        query = '''REPLACE INTO titles VALUES {}'''.format(','.join(['(?,?,?,?)']*len(titles)))
-        if len(titles):
-            self.cursor.execute(query,[item for sublist in titles for item in sublist])
+    def cacheTitles(self, titles_full, query_max = 999//4): # SQLITE_MAX_VARIABLE_NUMBER defaults to 999
         self.cursor.execute('''UPDATE user_settings SET title_update=strftime('%s', 'now') WHERE id=0''')
+        self.conn.commit()
+        for titles in [titles_full[i:i+query_max] for i in range(0,len(titles_full),query_max)]:
+            query = '''REPLACE INTO titles VALUES {}'''.format(','.join(['(?,?,?,?)']*len(titles)))
+            self.cursor.execute(query,[item for sublist in titles for item in sublist])
         self.conn.commit()
         
     def titleUpdateTime(self, override = 0):
@@ -421,3 +422,4 @@ ELSE aid END AS aid
     def anidbSetDelay(self,delay):
         self.cursor.execute('''UPDATE anidb_limiting SET delay=? WHERE id=0''',(delay,))
         self.conn.commit()
+        
