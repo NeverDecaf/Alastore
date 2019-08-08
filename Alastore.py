@@ -363,13 +363,9 @@ class TreeModel(QtCore.QAbstractItemModel):
         return opt
 
     def openInFileExplorer(self,index,parent):
-        import ctypes
-        ctypes.windll.ole32.CoInitialize(None)
-        upath = index.internalPointer().path()
-        pidl = ctypes.windll.shell32.ILCreateFromPathW(upath)
-        ctypes.windll.shell32.SHOpenFolderAndSelectItems(pidl, 0, None, 0)
-        ctypes.windll.shell32.ILFree(pidl)
-        ctypes.windll.ole32.CoUninitialize()
+        toopen=index.internalPointer().path()
+        if os.path.exists(toopen):
+            subprocess.Popen('explorer.exe /select,"{}"'.format(os.path.abspath(toopen)))
         
     def hideSeries(self,index,parent):
         async def internals():
