@@ -1456,6 +1456,13 @@ ul { margin: 0; padding: 0; }
         asyncio.ensure_future(self._model.configDialog(self.main_window))        
 
 if __name__ == '__main__':
+    # chdir to the correct directory to ensure configs, etc. are loaded correctly.
+    import os,sys
+    try:
+        sys._MEIPASS
+        os.chdir(os.path.dirname(sys.argv[0]))
+    except:
+        os.chdir(os.path.dirname(os.path.realpath(__file__)))
     import logging.handlers
     log_fh = None
     if os.path.exists('DEBUG_TEST'):
