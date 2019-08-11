@@ -1000,7 +1000,6 @@ class ItemDelegate(QtWidgets.QStyledItemDelegate):
         from PyQt5.QtGui        import (QPainter, QPainterPath,
                                                 QPalette, QPixmap, QPen)
         painter.save()
-        painter.setRenderHint( painter.Antialiasing )
         x = option.rect.x()
         x= 1
         dw = option.decorationSize.width()
@@ -1012,9 +1011,8 @@ class ItemDelegate(QtWidgets.QStyledItemDelegate):
             rowcount = index.parent().internalPointer().childCount()
         else:
             rowcount = 0 #doesn't matter
-        pen = QPen( option.palette.color( QPalette.Light ) )
+        pen = QPen( COLORSCHEME['linecolor'] )
         painter.setRenderHint( painter.Antialiasing, False )
-        pen.setColor( option.palette.color( QPalette.Shadow ) )
         painter.setPen( pen )
 
         if index.internalPointer().downloaded():
@@ -1441,34 +1439,21 @@ ul { margin: 0; padding: 0; }
 
 if __name__ == '__main__':
     # chdir to the correct directory to ensure configs, etc. are loaded correctly.
+    # also load theme from ini
     import os,sys
+    import configparser
+    config = configparser.ConfigParser()
     try:
-        sys._MEIPASS
+        config.read(os.path.join(sys._MEIPASS, 'alastore_theme.ini'))
         os.chdir(os.path.dirname(sys.argv[0]))
     except:
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
-    # load theme from ini
-    import configparser
-    config = configparser.ConfigParser()
-    config.add_section('COLOR_SCHEME')
-    config['COLOR_SCHEME'] = {
-           'watched_header_background': '#D7D7D7',
-           'downloaded_header_background': '#FFFFFF',
-           'downloading_header_background': '#E1E1E1',
-           'forcewatched_header_background':'#E1E1E1',
-           'watched_background': '#FFFFFF',
-           'downloaded_background': '#FFFFFF',
-           'downloading_background': '#DCDCDC',
-           'forcewatched_background':'#DCDCDC',
-           'watched_text': '#7D1919',
-           'downloaded_text': '#197D19',
-           'downloading_text': '#1E7878',
-           'forcewatched_text':'#B43737',
-           }
-    COLORSCHEME = {}
-    
-    # attempt to load custom color scheme
     config.read('alastore_theme.ini')
+
+    if 'COLOR_SCHEME' not in config:
+        print('alastore_theme.ini is missing!')
+        exit(2)
+    COLORSCHEME = {}
     for k in config['COLOR_SCHEME']:
         COLORSCHEME[k] = QtGui.QColor(config['COLOR_SCHEME'][k])
 
@@ -1509,6 +1494,8 @@ if __name__ == '__main__':
     treeView = TreeView()
     model = TreeModel(rootNode,writelock,updatelock,threadpool)
     delegate = ItemDelegate()
+
+    
     
     treeView.setExpandsOnDoubleClick(False)
     treeView.header().hide()
@@ -1519,6 +1506,8 @@ if __name__ == '__main__':
     treeView.setIndentation(delegate.getHeaderHeight(treeView.fontMetrics()))
     treeView.setModel(model)
     
+    treeView.setStyleSheet("background-color: rgb{}".format(COLORSCHEME['background'].getRgb()));
+
     model.sort(0)
 
     main = HideableWithDialog(model)
