@@ -19,6 +19,8 @@ You can double-click the "header" of any series to watch the latest (unwatched) 
 
 Closing the main window will simply minimize it to tray. Double-click the icon to bring it back. Alastore is meant to run in the background and sit in your tray at all times. You can run it on startup with the -q switch to have it start minimized to tray.
 
+If you want to use a custom or alternative color scheme place alastore_theme.ini in the same folder as alastore and adjust the colors as you see fit. A grayscale theme is included in the repo, simply rename it to use it.
+
 ###### A final warning(s):
 * If you add a season 2 on shanaproject **make sure you delete your follow for season 1.** Following both will cause you to have duplicate episodes downloaded to your computer (this isn't an issue with alastore but one with Shanaproject; it can, however, cause issues with Alastore as well.) With regards to Alastore's anidb update feature, you will want to keep the s2 follow and remove the s1 follow to prevent potential failed mylist adds.
 * Functionality without a linked anidb account is completely untested. YMMV but it should work fairly well.
