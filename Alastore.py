@@ -31,22 +31,6 @@ FULLUPDATE_GRACEPERIOD = 60*5 # 5m time before first full update
 ANIDB_DEFAULT_DELAY = 675
 ANIDB_MAX_DELAY = 86400*4 # 4 days
 
-COLORSCHEME = {'background': QtGui.QColor(255,255,255),#
-               'watchedh': QtGui.QColor(215,215,215),#
-               'downloadedh': QtGui.QColor(255,255,255),#
-               'notdownloadedh': QtGui.QColor(225,225,225),#
-               'downloadprogressh':QtGui.QColor(255,255,255),
-               'forcewatchedh':QtGui.QColor(225,225,225),
-               'watched': QtGui.QColor(255,255,255),#
-               'downloaded': QtGui.QColor(255,255,255),#
-               'notdownloaded': QtGui.QColor(220,220,220),#
-               'forcewatched':QtGui.QColor(220,220,220),
-               'watchedfg': QtGui.QColor(125,25,25),
-               'downloadedfg': QtGui.QColor(25,125,25),
-               'notdownloadedfg': QtGui.QColor(30,120,120),
-               'forcewatchedfg':QtGui.QColor(180,55,55),
-               }
-
 class Node(object):
     def __init__(self, data, parent=None):
         self._data = data
@@ -358,7 +342,7 @@ class TreeModel(QtCore.QAbstractItemModel):
 ##        if not isheader:
         opt.append((self.tr("&Mark Episode Watched"),self.markEpisodeWatched,{}))
         user_settings = self._sqlManager.getSettings()
-        if user_settings['Shana Project Username'] and user_settings['Shana Project Password']:
+        if user_settings and user_settings['Shana Project Username'] and user_settings['Shana Project Password']:
             opt.append((self.tr("&Drop Series"),self.dropSeries,{}))            
         return opt
 
@@ -417,7 +401,7 @@ You should only use this option if a file fails to download or is moved/deleted 
                 user_settings = self._sqlManager.getSettings()
                 title = index.internalPointer().title()
                 id = index.internalPointer().id()
-                if user_settings['Shana Project Username'] and user_settings['Shana Project Password']:
+                if user_settings and user_settings['Shana Project Username'] and user_settings['Shana Project Password']:
                     async with self.async_shanalock:
 ##                        await self._shanalink.update_creds(user_settings['Shana Project Username'],user_settings['Shana Project Password'])
                         self._shanalink.update_creds(user_settings['Shana Project Username'],user_settings['Shana Project Password'])
@@ -891,7 +875,7 @@ You should only use this option if a file fails to download or is moved/deleted 
                 for icon in newIcons:
                     folder_title = r''.join(i for i in icon['title'] if i not in r'\/:*?"<>|.')
                     dest_folder = os.path.join(user_settings['Save Directory'],folder_title)
-                    if user_settings['Season Sort'] and icon['season']:
+                    if user_settings and user_settings['Season Sort'] and icon['season']:
                         year = icon['season'].split()[1]
                         dest_folder = os.path.join(user_settings['Save Directory'],year,icon['season'],folder_title)
                     try:
@@ -1035,36 +1019,36 @@ class ItemDelegate(QtWidgets.QStyledItemDelegate):
 
         if index.internalPointer().downloaded():
             if index.internalPointer().watched():
-                fg = COLORSCHEME['watchedfg']
-                bg = COLORSCHEME['watched']
+                fg = COLORSCHEME['watched_text']
+                bg = COLORSCHEME['watched_background']
                 if not index.parent().isValid():
-                    bg = COLORSCHEME['watchedh']
+                    bg = COLORSCHEME['watched_header_background']
             else:
-                fg = COLORSCHEME['downloadedfg']
-                bg = COLORSCHEME['downloaded']
+                fg = COLORSCHEME['downloaded_text']
+                bg = COLORSCHEME['downloaded_background']
                 if not index.parent().isValid():
-                    bg = COLORSCHEME['downloadedh']
+                    bg = COLORSCHEME['downloaded_header_background']
         else:
             if index.internalPointer().watched():
-                fg = COLORSCHEME['forcewatchedfg']
-                bg = COLORSCHEME['forcewatched']
+                fg = COLORSCHEME['forcewatched_text']
+                bg = COLORSCHEME['forcewatched_background']
                 if not index.parent().isValid():
-                    bg = COLORSCHEME['forcewatchedh']
+                    bg = COLORSCHEME['forcewatched_header_background']
             else:
-                fg = COLORSCHEME['notdownloadedfg']
-                bg = COLORSCHEME['notdownloaded']
+                fg = COLORSCHEME['downloading_text']
+                bg = COLORSCHEME['downloading_background']
                 if not index.parent().isValid():
-                    bg = COLORSCHEME['notdownloadedh']
+                    bg = COLORSCHEME['downloading_header_background']
 
         if not index.parent().isValid():
             painter.fillRect( x , y , w , h, bg )
             if not index.internalPointer().downloaded() and not index.internalPointer().watched():
-                painter.fillRect( x , y , max(0,int(index.internalPointer().downloadProgress()*(w/100.))) , h, COLORSCHEME['downloadprogressh'] )
+                painter.fillRect( x , y , max(0,int(index.internalPointer().downloadProgress()*(w/100.))) , h, COLORSCHEME['downloaded_header_background'] )
             painter.drawRect( x , y , w , h)     
         else:
             painter.fillRect( x , option.rect.y() , w , option.rect.height(), bg )
             if not index.internalPointer().downloaded() and not index.internalPointer().watched():
-                painter.fillRect( x , option.rect.y() , max(0,int(index.internalPointer().downloadProgress()*(w/100.))) , option.rect.height(), COLORSCHEME['downloadprogressh'] )
+                painter.fillRect( x , option.rect.y() , max(0,int(index.internalPointer().downloadProgress()*(w/100.))) , option.rect.height(), COLORSCHEME['downloaded_background'] )
             ypad = 0
             if index.row() == rowcount-1:
                 painter.drawRect( x , y+h , w , 0)
@@ -1463,6 +1447,31 @@ if __name__ == '__main__':
         os.chdir(os.path.dirname(sys.argv[0]))
     except:
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
+    # load theme from ini
+    import configparser
+    config = configparser.ConfigParser()
+    config.add_section('COLOR_SCHEME')
+    config['COLOR_SCHEME'] = {
+           'watched_header_background': '#D7D7D7',
+           'downloaded_header_background': '#FFFFFF',
+           'downloading_header_background': '#E1E1E1',
+           'forcewatched_header_background':'#E1E1E1',
+           'watched_background': '#FFFFFF',
+           'downloaded_background': '#FFFFFF',
+           'downloading_background': '#DCDCDC',
+           'forcewatched_background':'#DCDCDC',
+           'watched_text': '#7D1919',
+           'downloaded_text': '#197D19',
+           'downloading_text': '#1E7878',
+           'forcewatched_text':'#B43737',
+           }
+    COLORSCHEME = {}
+    
+    # attempt to load custom color scheme
+    config.read('alastore_theme.ini')
+    for k in config['COLOR_SCHEME']:
+        COLORSCHEME[k] = QtGui.QColor(config['COLOR_SCHEME'][k])
+
     import logging.handlers
     log_fh = None
     if os.path.exists('DEBUG_TEST'):
