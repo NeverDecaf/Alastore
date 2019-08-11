@@ -1,9 +1,11 @@
 #! /usr/bin/env python
 import sys
-
+
+
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import *
-
+
+
 '''
 to use a tray icon just copy the main method.
 For your main window you must subclass HideableWindow
@@ -32,7 +34,8 @@ class HideableWindow(QtWidgets.QMainWindow):
             self.restoreGeometry(self.geometry)
             self.restoreState(self.state) # restore state second to avoid flashing
 import os
-
+
+
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
     try:
@@ -90,7 +93,7 @@ class Systray(QtWidgets.QWidget):
         for action in self.actions:
                 self.trayIconMenu.addAction(action)
 
-        self.trayIcon = QtWidgets.QSystemTrayIcon(QtGui.QIcon(resource_path("book.ico")), self)#was (self)
+        self.trayIcon = QtWidgets.QSystemTrayIcon(QtGui.QIcon(resource_path("book_tray.ico")), self)#was (self)
         self.trayIcon.setContextMenu(self.trayIconMenu)
         self.trayIcon.activated.connect(self.click_trap)
         
