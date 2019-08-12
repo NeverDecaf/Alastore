@@ -1011,7 +1011,7 @@ class ItemDelegate(QtWidgets.QStyledItemDelegate):
             rowcount = index.parent().internalPointer().childCount()
         else:
             rowcount = 0 #doesn't matter
-        pen = QPen( COLORSCHEME['linecolor'] )
+        pen = QPen( COLORSCHEME['main_window_lines'] )
         painter.setRenderHint( painter.Antialiasing, False )
         painter.setPen( pen )
 
@@ -1505,9 +1505,17 @@ if __name__ == '__main__':
 
     treeView.setIndentation(delegate.getHeaderHeight(treeView.fontMetrics()))
     treeView.setModel(model)
+    ss = "QTreeView {{ background-color: rgb{}; color: rgb{} }}".format(COLORSCHEME['main_window_background'].getRgb(),COLORSCHEME['main_window_lines'].getRgb())
+    ss += "\n* {{ {} {} {} }}".format("color: rgb{};".format(COLORSCHEME['dialog_text'].getRgb()) if 'dialog_text' in COLORSCHEME else "",
+                                      "background-color: rgb{};".format(COLORSCHEME['dialog_background'].getRgb()) if 'dialog_background' in COLORSCHEME else "",
+                                      "selection-background-color: rgb{};".format(COLORSCHEME['selection_background'].getRgb()) if 'selection_background' in COLORSCHEME else "",
+                                      "outline-color: rgb{};".format(COLORSCHEME['selection_background'].getRgb()) if 'selection_background' in COLORSCHEME else ""
+                                      )
+    ss += "\nQPushButton:hover {{ {} }}".format("background-color: rgb{};".format(COLORSCHEME['selection_background'].getRgb()) if 'selection_background' in COLORSCHEME else "")
+##    ss += "\nQLineEdit:focus {{ {} }}".format("border:2px inset rgb{};".format(COLORSCHEME['selection_background'].getRgb()) if 'selection_background' in COLORSCHEME else "")
+##    ss += "\nQCheckBox::indicator:hover {{ {} }}".format("border:1px solid rgb{};".format(COLORSCHEME['selection_background'].getRgb()) if 'selection_background' in COLORSCHEME else "")
+    app.setStyleSheet(ss)
     
-    treeView.setStyleSheet("background-color: rgb{}".format(COLORSCHEME['background'].getRgb()));
-
     model.sort(0)
 
     main = HideableWithDialog(model)
