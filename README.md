@@ -17,7 +17,7 @@ The bare minimum setup:
 
 You can double-click the "header" of any series to watch the latest (unwatched) episode. You can also expand a series if you want to rewatch older episodes.
 
-Closing the main window will simply minimize it to tray. Double-click the icon to bring it back. Alastore is meant to run in the background and sit in your tray at all times. You can run it on startup with the -q switch to have it start minimized to tray.
+Closing the main window will simply minimize it to tray. Double-click the icon to bring it back. Alastore is meant to run in the background and sit in your tray.
 
 If you want to use a custom or alternative color scheme place alastore_theme.ini in the same folder as Alastore.exe and edit the colors as you see fit. Several sample themes are available in this repo, simply rename them to alastore_theme.ini to use them.
 

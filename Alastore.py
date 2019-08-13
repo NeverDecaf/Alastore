@@ -1,7 +1,6 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import QMutexLocker
 import sys
-import sqlite3
 import time
 import rss
 import os
@@ -186,10 +185,10 @@ class HeaderNode(Node):
 
 class TreeModel(QtCore.QAbstractItemModel):
     """INPUTS: Node, QObject"""
-    def __init__(self, root, writelock, updatelock, threadpool, parent=None):
+    def __init__(self, root, writelock, updatelock, threadpool, sqlmanager, parent=None):
         super(TreeModel, self).__init__(parent)
         self._rootNode = root
-        self._sqlManager = sql.SQLManager()
+        self._sqlManager = sqlmanager
         self._anidb_delay,self._last_anidb_add,self._last_anidb_info = self._sqlManager.getAnidbSettings()
         self._updateData()
         self.async_writelock = asyncio.Lock()
@@ -445,12 +444,23 @@ You should only use this option if a file fails to download or is moved/deleted 
                     
     async def configDialog(self,parent):
         settings = self._sqlManager.getSettings(raw=True,fetchanyway=True)
-        d=SettingsDialog(settings,parent)
+        startupsettings = self._sqlManager.getStartupSettings()
+        d=SettingsDialog(settings,startupsettings,parent)
         d.exec_()
         if d.getValues():
-            settings = d.getValues()
+            settings_dict = d.getValues()
             async with self.async_writelock:
-                self._sqlManager.saveSettings(*[settings[key] for key in self._sqlManager.COLUMN_NAMES])
+                self._sqlManager.saveSettings(*[settings_dict[key] for key in self._sqlManager.COLUMN_NAMES])
+                self._sqlManager.setStartupSettings(settings_dict['start_with_windows'],settings_dict['start_hidden'])
+                if os.name=='nt':
+                    settings = QtCore.QSettings(r"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run", QtCore.QSettings.NativeFormat)
+                    if int(settings_dict['start_with_windows']) == 2:
+                        cmd = '"{}"'.format(sys.argv[0])
+                        if int(settings_dict['start_hidden']) == 2:
+                            cmd += ' -q'
+                        settings.setValue("Alastore",cmd)
+                    else:
+                        settings.remove("Alastore")
         d.deleteLater()
 
     def quickUpdate(self):
@@ -1081,7 +1091,7 @@ class ItemDelegate(QtWidgets.QStyledItemDelegate):
         return fontMetrics.height()+self.textVertPadding+self.listPadding[1]*2
 
 class SettingsDialog(QtWidgets.QDialog):
-    def __init__(self,initialSettings, parent=None):
+    def __init__(self,initialSettings, startupSettings, parent=None):
         from PyQt5.QtCore import Qt
         super(SettingsDialog, self).__init__(parent)
         self.result=None
@@ -1172,6 +1182,15 @@ class SettingsDialog(QtWidgets.QDialog):
         self.options['Auto Hide Old']=QtWidgets.QCheckBox('Automatically Hide Older Series (~1 month old)')
         optionsLayout.addRow(self.options['Auto Hide Old'])
 
+        self.options['start_with_windows']=QtWidgets.QCheckBox('Start with Windows')
+        self.options['start_hidden'] = QtWidgets.QCheckBox("Start minimized to tray")
+        self.options['start_with_windows'].setCheckState(int(startupSettings['start_with_windows']))
+        self.options['start_hidden'].setCheckState(int(startupSettings['start_hidden']))
+        optionsLayout.addRow(self.options['start_with_windows'])
+        optionsLayout.addRow(self.options['start_hidden'])
+        if os.name!='nt':
+            self.options['start_with_windows'].setDisabled(True)
+        
         self.saveButton=QtWidgets.QPushButton('Save')
         self.cancelButton=QtWidgets.QPushButton('Cancel')
         
@@ -1325,7 +1344,6 @@ from qtrayico import Systray
 class trayIcon(Systray):
     def __init__(self,window,model):
         super(trayIcon,self).__init__(window)
-        self._sql = sql.SQLManager()
         self._model = model
         
     def createActions(self):
@@ -1492,7 +1510,8 @@ if __name__ == '__main__':
     updatelock = QtCore.QMutex()
 
     treeView = TreeView()
-    model = TreeModel(rootNode,writelock,updatelock,threadpool)
+    sqlmanager = sql.SQLManager()
+    model = TreeModel(rootNode,writelock,updatelock,threadpool,sqlmanager)
     delegate = ItemDelegate()
 
     
@@ -1525,7 +1544,18 @@ if __name__ == '__main__':
     tray = trayIcon(main,model)
 
     main.setCentralWidget(treeView)
-    if '-q' not in sys.argv and '/q' not in sys.argv and '/silent' not in sys.argv:
+
+    settings_dict = sqlmanager.getStartupSettings()
+    if os.name=='nt':
+        settings = QtCore.QSettings(r"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run", QtCore.QSettings.NativeFormat)
+        if int(settings_dict['start_with_windows']) == 2:
+            cmd = '"{}"'.format(sys.argv[0])
+            if int(settings_dict['start_hidden']) == 2:
+                cmd += ' -q'
+            settings.setValue("Alastore",cmd)
+        else:
+            settings.remove("Alastore")
+    if '-q' not in sys.argv and '/q' not in sys.argv and '/silent' not in sys.argv and 0==int(settings_dict['start_hidden']):
         main.show()
     app.setQuitOnLastWindowClosed(False)
 

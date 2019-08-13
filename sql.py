@@ -107,6 +107,14 @@ class SQLManager:
                  last_update real DEFAULT 0,
                  last_seriesinfo real DEFAULT 0)''')
         self.cursor.execute('''INSERT OR IGNORE INTO anidb_limiting (id) VALUES (0)''')
+        try:
+            self.cursor.execute('''ALTER TABLE user_settings ADD COLUMN start_hidden int DEFAULT 0''')
+        except sqlite3.OperationalError:
+            pass # col exists
+        try:
+            self.cursor.execute('''ALTER TABLE user_settings ADD COLUMN start_with_windows int DEFAULT 0''')
+        except sqlite3.OperationalError:
+            pass # col exists
         self.conn.commit()
 
     # saves the supplied user settings into the db.
@@ -138,7 +146,15 @@ custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shan
             return None
         #expand environment vars in the paths.
         return settings
-    
+
+    def getStartupSettings(self):
+        self.cursor.execute('''SELECT start_with_windows,start_hidden FROM user_settings where id=0''')
+        return self.cursor.fetchone()
+
+    def setStartupSettings(self,start_with_windows = 0, start_hidden = 0):
+        self.cursor.execute('''UPDATE user_settings SET start_with_windows=?,start_hidden=? WHERE id=0''',(start_with_windows,start_hidden))
+        self.conn.commit()
+        
     def watchMoveQueue(self,source_path,dest_path,ed2k,filesize):
         self.cursor.execute('''UPDATE episode_data SET watched=1,path=? WHERE path=?''',(dest_path,source_path))
         self.cursor.execute('''REPLACE INTO parse_data (path,id,episode,subgroup,ed2k,filesize) SELECT path,id,episode,subgroup,?,? FROM episode_data WHERE path=? LIMIT 1''',(ed2k,filesize,dest_path))
