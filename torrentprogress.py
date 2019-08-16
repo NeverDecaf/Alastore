@@ -1,5 +1,3 @@
-
-HEADERS={'User-Agent':'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.9.0.7) Gecko/2009021910 Firefox/3.0.7'} # we will now get a 403 without these, it might not be long before we need cookies too.
 # due to the nature of magnet links, the data may not always be available. therefore we must timeout eventually.
 MAGNET_TIMEOUT = 70 # in seconds
 import requests
@@ -8,6 +6,7 @@ import tempfile
 import shutil
 from time import sleep
 import socket
+from constants import *
 ses = None
 def download_magnet(url):
     global ses
@@ -57,7 +56,7 @@ def download_torrent(url):
             raise
             return None
     try:
-        with requests.get(url, headers=HEADERS) as r:
+        with requests.get(url, headers=TORRENT_HEADERS) as r:
             torrent = r.content
         return torrent
     except requests.exceptions.RequestException as e:

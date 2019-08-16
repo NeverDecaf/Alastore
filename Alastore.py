@@ -24,12 +24,7 @@ import stat
 from quamash import QEventLoop, QThreadExecutor
 import asyncio
 import errno
-
-FULLUPDATE_TIME = 60 * 10 #once every 10 m
-INITIALUPDATE_GRACEPERIOD = 30 # this is time before the first (only) quick update
-FULLUPDATE_GRACEPERIOD = 60*5 # 5m time before first full update
-ANIDB_DEFAULT_DELAY = 675
-ANIDB_MAX_DELAY = 86400*4 # 4 days
+from constants import *
 
 class Node(object):
     def __init__(self, data, parent=None):
@@ -1462,13 +1457,7 @@ if __name__ == '__main__':
     import os,sys
     import configparser
     config = configparser.ConfigParser()
-    try:
-        config.read(os.path.join(sys._MEIPASS, 'alastore_theme.ini'))
-        os.chdir(os.path.dirname(sys.argv[0]))
-    except:
-        os.chdir(os.path.dirname(os.path.realpath(__file__)))
-    config.read('alastore_theme.ini')
-
+    config.read(resource_path('alastore_theme.ini'))
     if 'COLOR_SCHEME' not in config:
         print('alastore_theme.ini is missing!')
         exit(2)
@@ -1478,8 +1467,8 @@ if __name__ == '__main__':
 
     import logging.handlers
     log_fh = None
-    if os.path.exists('DEBUG_TEST'):
-        log_fh = open("DEBUG.log", "a", encoding="utf-8")
+    if os.path.exists(storage_path('DEBUG_TEST')):
+        log_fh = open(storage_path("DEBUG.log"), "a", encoding="utf-8")
         ch = logging.StreamHandler(log_fh)
         formatter = logging.Formatter()
         ch.setFormatter(formatter)

@@ -6,7 +6,6 @@ from io import BytesIO
 import os
 import re
 import anidb
-IMG_URL=re.compile('http://img7\.anidb\.net/pics/anime/\d*\.jpg')
 def resize_center_image(image):
     IMAGE_SIZE=(256,256)
     zero,zero,w,h=image.getbbox()

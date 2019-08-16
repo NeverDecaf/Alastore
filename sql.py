@@ -6,42 +6,17 @@ from StringMatcher import StringMatcher
 from rss import RSSReader
 from collections import defaultdict
 import asyncio
-### READ THIS BEFORE CHANGING THE TIMES BELOW ###
-# setting these higher is a terrible idea
-# because failures still reset the timer so you may wait a week even though it was a simple outage
-# (exceptions to this will be marked with #exception, though I'm not 100% sure these are accurate)
-# setting some of these any lower than 1 day may result in you getting IP banned by anidb.
-ONE_DAY = 86400
-ONE_WEEK = ONE_DAY * 7
-'time between cover art updates, not suggested to set lower than a day.'
-COVER_UPDATE_TIME=ONE_DAY
-'time between series info updates (aid, season, etc), do not set lower than 1 day'
-SERIES_UPDATE_TIME=ONE_DAY
-'time between download of full title list, DO NOT set lower than 1 day'
-TITLE_UPDATE_TIME=ONE_DAY
-'time before a file will be generic added. should be sufficiently long to give others time to add the file to anidb.'
-ANIDB_WAIT_TIME=ONE_WEEK#exception
-'''after this interval, series will stop being updated in any way.
-this should be long enough that if no episode has been released in this time period,
-it is safe to assume the series has ended.
-HOWEVER, if a new episode for the series is released, it will be automatically unhidden, so you don't need to go too extreme.'''
-LAST_UPDATE_TIME=2 * ONE_WEEK + ONE_DAY#exception
-'time between title match (levenshtein) to guess aids'
-AID_UPDATE_TIME=ONE_DAY#exception
-'''time before bad torrent entries are removed from blacklist'''
-BLACKLIST_UPDATE_TIME=ONE_DAY#exception
+from constants import *
 
 class SQLManager:
     conn=None
     cursor=None
     db=None
     EPISODE_NUM = re.compile('(?<= - )(\d+\.?\d*)') #make sure you get the last one [-1]
-    SHANA_TITLE = re.compile('.*(?= - \d)')
     SUBGROUP = re.compile('(?<=\[)[^\]]*(?=])')#make sure you get the last one [-1]
-    COLUMN_NAMES = ['RSS Feed','Download Directory','Save Directory','anidb Username','anidb Password','Season Sort','Poster Icons','Auto Hide Old','Shana Project Username','Shana Project Password']
-
+    
     # init. supply the name of the db.
-    def __init__(self, db='Alastore.db', createtables = False):
+    def __init__(self, db=storage_path('Alastore.db'), createtables = False):
         self.db=db
         self.conn=sqlite3.connect(self.db)#,check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
@@ -133,10 +108,10 @@ class SQLManager:
     def getSettings(self,raw=False,fetchanyway=False):
         if raw:
             self.cursor.execute('''SELECT rss AS "{}", dl_dir AS "{}", st_dir AS "{}", anidb_username AS "{}", anidb_password AS "{}", season_sort AS "{}",
-custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shanaproject_password AS "{}" FROM user_settings WHERE id=0'''.format(*self.COLUMN_NAMES))
+custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shanaproject_password AS "{}" FROM user_settings WHERE id=0'''.format(*COLUMN_NAMES))
         else:
             self.cursor.execute('''SELECT rss AS "{}", expandvars(dl_dir) AS "{}", expandvars(st_dir) AS "{}", anidb_username AS "{}", anidb_password AS "{}", season_sort AS "{}",
-custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shanaproject_password AS "{}" FROM user_settings WHERE id=0'''.format(*self.COLUMN_NAMES))
+custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shanaproject_password AS "{}" FROM user_settings WHERE id=0'''.format(*COLUMN_NAMES))
         settings = self.cursor.fetchone()
         if fetchanyway:
             return settings
@@ -238,17 +213,17 @@ custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shan
             'no episode number means this is a pv or op/ed or something we should just ignore.'
             return 0
         display_name = rssTitle
-        shana_title = self.SHANA_TITLE.findall(rssTitle)[0]
+        rss_title = RSS_TITLE_RE.findall(rssTitle)[0]
         try:
             subgroup = self.SUBGROUP.findall(rssTitle)[-1]
         except IndexError:
             subgroup = None
-        self.cursor.execute('''SELECT id FROM shana_series WHERE title=?''',(shana_title,))
+        self.cursor.execute('''SELECT id FROM shana_series WHERE title=?''',(rss_title,))
         lid = self.cursor.fetchone()#format is (lid,)
         if lid==None:
-            self.cursor.execute('''INSERT INTO shana_series (title) VALUES (?)''', (shana_title,))
+            self.cursor.execute('''INSERT INTO shana_series (title) VALUES (?)''', (rss_title,))
             self.conn.commit()
-            self.cursor.execute('''SELECT id FROM shana_series WHERE title=?''',(shana_title,))
+            self.cursor.execute('''SELECT id FROM shana_series WHERE title=?''',(rss_title,))
             lid = self.cursor.fetchone()['id']
         else:
             lid=lid['id']

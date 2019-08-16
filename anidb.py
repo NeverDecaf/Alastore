@@ -3,10 +3,6 @@
 provides methods to access anidb:
 add_File()returns aid if not provided.
 '''
-CLIENT='alastorehttp'
-CLIENTVER='1'
-UDPCLIENT='alastore'
-UDPCLIENTVER='1'
 DEBUG_ADD_CHAIN=0 # set to 1 to debug mylistadd failures
 import socket
 import time
@@ -21,15 +17,8 @@ from xml.parsers.expat import ExpatError
 from functools import reduce
 from PIL import Image
 from io import BytesIO
+from constants import *
 GLOBAL_ANIDB_TIMER = time.time()
-IMG_URL_BASE = 'http://img7.anidb.net/pics/anime/{}'
-ANIDB_RATE_LIMIT = 2.5 # specified as 2s but add a bit to be safe.
-FAKE_HEADERS={
-'Accept-Charset':'ISO-8859-1,utf-8;q=0.7,*;q=0.3',
-'Accept-Encoding':'gzip',
-'Accept-Language':'en-US,en;q=0.8',
-'User-Agent':'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/535.11 (KHTML, like Gecko) Chrome/17.0.963.56 Safari/535.11',
-    }
 RETURN_CODES={
     505:'ILLEGAL INPUT OR ACCESS DENIED',
     555:'BANNED',
@@ -48,7 +37,7 @@ def anidb_series_info(aid):
     url='http://api.anidb.net:9001/httpapi?request=anime&client=%s&clientver=%s&protover=1&aid=%s'%(CLIENT,CLIENTVER,aid)
     try:
         time.sleep(max(ANIDB_RATE_LIMIT-time.time()+GLOBAL_ANIDB_TIMER,0))
-        response = requests.get(url,headers=FAKE_HEADERS)
+        response = requests.get(url,headers=ANIDB_FAKE_HEADERS)
         GLOBAL_ANIDB_TIMER = time.time()
         response.raise_for_status()
         response.encoding = 'utf-8' # anidb default
@@ -59,7 +48,7 @@ def anidb_series_info(aid):
                 print('series info request failed (banned by anidb)')
                 return None,None
             raise Exception('Anidb Error:',val)
-        imageurl = IMG_URL_BASE.format(xmldoc.getElementsByTagName('picture')[0].firstChild.nodeValue)
+        imageurl = ANIDB_IMG_URL_BASE.format(xmldoc.getElementsByTagName('picture')[0].firstChild.nodeValue)
         airdate = xmldoc.getElementsByTagName('startdate')[0].firstChild.nodeValue
         for episode in xmldoc.getElementsByTagName('epno'):
             if episode.getAttribute('type')=='1' and episode.firstChild.nodeValue=='3':
@@ -72,7 +61,7 @@ def anidb_series_info(aid):
 def anidb_title_list():
     global GLOBAL_ANIDB_TIMER,ANIDB_RATE_LIMIT
     time.sleep(max(ANIDB_RATE_LIMIT-time.time()+GLOBAL_ANIDB_TIMER,0))
-    response = requests.get('http://anidb.net/api/anime-titles.xml.gz',headers=FAKE_HEADERS)
+    response = requests.get('http://anidb.net/api/anime-titles.xml.gz',headers=ANIDB_FAKE_HEADERS)
     GLOBAL_ANIDB_TIMER = time.time()
     response.raise_for_status()
     response.encoding = 'utf-8' # anidb default
@@ -98,7 +87,7 @@ def anidb_title_list():
 def anidb_dl_poster_art(imageurl):
     global GLOBAL_ANIDB_TIMER,ANIDB_RATE_LIMIT
     time.sleep(max(ANIDB_RATE_LIMIT-time.time()+GLOBAL_ANIDB_TIMER,0))
-    response = requests.get(imageurl,headers=FAKE_HEADERS)
+    response = requests.get(imageurl,headers=ANIDB_FAKE_HEADERS)
     GLOBAL_ANIDB_TIMER = time.time()
     lazyopen = Image.open(BytesIO(response.content))
     lazyopen.load() # fix for a bug in PIL 1.1.7

@@ -5,12 +5,7 @@ import socket
 import re
 import urllib.parse
 import requests
-try:
-    # Python 2.6-2.7 
-    from html.parser import HTMLParser
-except ImportError:
-    # Python 3
-    from html.parser import HTMLParser
+from html.parser import HTMLParser
 htmlparser = HTMLParser()
 IS_MAGNET = re.compile('^magnet\:.*')
 # IF YOU PLAN ON ADDING SUPPORT FOR A DIFFERENT RSS, READ THIS FIRST:

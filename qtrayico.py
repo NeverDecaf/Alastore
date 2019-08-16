@@ -1,10 +1,8 @@
 #! /usr/bin/env python
-import sys
-
-
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import *
 
+from constants import *
 
 '''
 to use a tray icon just copy the main method.
@@ -33,44 +31,7 @@ class HideableWindow(QtWidgets.QMainWindow):
         if self.state:
             self.restoreGeometry(self.geometry)
             self.restoreState(self.state) # restore state second to avoid flashing
-import os
-
-
-def resource_path(relative_path):
-    """ Get absolute path to resource, works for dev and for PyInstaller """
-    try:
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(".")
-    return os.path.join(base_path, relative_path)
-
-
-class HelloWindow(QtWidgets.QMainWindow):
-
-	def __init__(self, win_parent = None):
-		#Init the base class
-		QtWidgets.QMainWindow.__init__(self, win_parent)
-		self.create_widgets()
-
-	def create_widgets(self):
-		#Widgets
-		self.label = QtWidgets.QLabel("Say hello:")
-		self.hello_edit = QtWidgets.QLineEdit()
-		self.hello_button = QtWidgets.QPushButton("Push Me!")
-		#Horizontal layout
-		h_box = QtWidgets.QHBoxLayout()
-		h_box.addWidget(self.label)
-		h_box.addWidget(self.hello_edit)
-		h_box.addWidget(self.hello_button)
-		#Create central widget, add layout and set
-		central_widget = QtWidgets.QWidget()
-		central_widget.setLayout(h_box)
-		self.setCentralWidget(central_widget)
-	def closeEvent(self,event):
-            self.hide()
-            event.ignore()
-		
+	
 class Systray(QtWidgets.QWidget):
     def __init__(self,main_window):
         QtWidgets.QWidget.__init__(self)
@@ -105,28 +66,4 @@ class Systray(QtWidgets.QWidget):
 ##            else:
 ##                    self.main_window.showMinimized() # in theory this should work but im doing something wrong.
             self.main_window.activateWindow()
-
-if __name__=='__main__':
-    app = QtWidgets.QApplication(sys.argv)
-    main_window = HelloWindow()#should be HideableWindow()
-    x = Systray(main_window)
-    main_window.show()
-
-    sys.exit(app.exec_())
-
-
-
-##if __name__ == "__main__":
-##    app = QtGui.QApplication([])
-##
-##    tray = SystemTrayIcon()
-##    tray.show()
-##    
-##    #set the exec loop going
-##    sys.exit(app.exec_())
-
-##def createActions(self):
-##
-##        self.quitAction = QtGui.QAction(self.tr("&Quit"), self)
-##        QtCore.QObject.connect(self.quitAction, QtCore.SIGNAL("triggered()"),
-##                               QtGui.qApp, QtCore.SLOT("quit()"))
+            
