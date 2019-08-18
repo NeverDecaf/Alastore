@@ -340,8 +340,8 @@ class TreeModel(QtCore.QAbstractItemModel):
     def getContextOptions(self,isheader):
         opt = []
         opt.append((self.tr("&Hide Series"),self.hideSeries,{}))
+        opt.append((self.tr("&Open Directory"),self.openInFileExplorer,{}))
         if os.name=='nt':
-            opt.append((self.tr("&Show in Explorer"),self.openInFileExplorer,{}))
             from winreg import OpenKey,QueryValueEx,HKEY_LOCAL_MACHINE
             try:
                 with OpenKey(HKEY_LOCAL_MACHINE, r"SOFTWARE\Wow6432Node\Syncplay") as key:
@@ -359,7 +359,12 @@ class TreeModel(QtCore.QAbstractItemModel):
     def openInFileExplorer(self,index,parent):
         toopen=index.internalPointer().path()
         if os.path.exists(toopen):
-            subprocess.Popen('explorer.exe /select,"{}"'.format(os.path.abspath(toopen)))
+            if sys.platform == 'darwin':
+                subprocess.call('open "{}"'.format(toopen), shell=True)
+            if sys.platform == 'win32':
+                subprocess.call(['explorer','/select','"{}"'.format(toopen)])
+            else:
+                subprocess.call('xdg-open "{}"'.format(toopen), shell=True)
         
     def hideSeries(self,index,parent):
         async def internals():
