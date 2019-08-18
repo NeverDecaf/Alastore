@@ -459,7 +459,6 @@ You should only use this option if a file fails to download or is moved/deleted 
         d=SettingsDialog(settings,startupsettings,parent)
         d.exec_()
         if d.getValues():
-            print(d.getValues())
             settings_dict = d.getValues()
             async with self.async_writelock:
                 self._sqlManager.saveSettings(*[settings_dict[key] for key in COLUMN_NAMES])
@@ -1456,10 +1455,11 @@ if __name__ == '__main__':
     import os,sys
     import configparser
     config = configparser.ConfigParser()
-    config.read(storage_path('alastore_theme.ini'))
+    config.read(resource_path('alastore_theme.ini'))
     if 'COLOR_SCHEME' not in config:
         print('alastore_theme.ini is missing!')
         exit(2)
+    config.read(storage_path('alastore_theme.ini'))
     COLORSCHEME = {}
     for k in config['COLOR_SCHEME']:
         COLORSCHEME[k] = QtGui.QColor(config['COLOR_SCHEME'][k])
