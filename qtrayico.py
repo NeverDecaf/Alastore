@@ -1,9 +1,8 @@
 #! /usr/bin/env python
-from PyQt5 import QtCore, QtGui, QtWidgets
+import sys
+from PyQt5 import QtGui, QtCore, QtWidgets
 from PyQt5.QtCore import *
-
 from constants import *
-
 '''
 to use a tray icon just copy the main method.
 For your main window you must subclass HideableWindow
@@ -31,7 +30,7 @@ class HideableWindow(QtWidgets.QMainWindow):
         if self.state:
             self.restoreGeometry(self.geometry)
             self.restoreState(self.state) # restore state second to avoid flashing
-	
+        
 class Systray(QtWidgets.QWidget):
     def __init__(self,main_window):
         QtWidgets.QWidget.__init__(self)
@@ -56,14 +55,12 @@ class Systray(QtWidgets.QWidget):
 
         self.trayIcon = QtWidgets.QSystemTrayIcon(QtGui.QIcon(resource_path("book_tray.ico")), self)#was (self)
         self.trayIcon.setContextMenu(self.trayIconMenu)
-        self.trayIcon.activated.connect(self.click_trap)
-        
-    def click_trap(self, value):
-        if value == QtWidgets.QSystemTrayIcon.DoubleClick: 
+        self.trayIcon.activated.connect(self.toggle_show)
+    
+    def toggle_show(self, value):
+        if self.main_window.isHidden():
             self.main_window.showNormal()
-##            if self.main_window.windowState() == Qt.WindowMinimized:
-##                    self.main_window.showNormal()
-##            else:
-##                    self.main_window.showMinimized() # in theory this should work but im doing something wrong.
             self.main_window.activateWindow()
-            
+        else:
+            self.main_window.close()
+
