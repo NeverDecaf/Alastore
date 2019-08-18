@@ -11,7 +11,6 @@ import torrentprogress
 from requests.exceptions import ConnectionError
 import anidb
 import datetime
-import makeico
 import sql
 import shutil
 import subprocess
@@ -360,11 +359,11 @@ class TreeModel(QtCore.QAbstractItemModel):
         toopen=index.internalPointer().path()
         if os.path.exists(toopen):
             if sys.platform == 'darwin':
-                subprocess.call('open "{}"'.format(toopen), shell=True)
+                subprocess.call('open "{}"'.format(os.path.dirname(toopen)), shell=True)
             if sys.platform == 'win32':
                 subprocess.call(['explorer','/select','"{}"'.format(toopen)])
             else:
-                subprocess.call('xdg-open "{}"'.format(toopen), shell=True)
+                subprocess.call('xdg-open "{}"'.format(os.path.dirname(toopen)), shell=True)
         
     def hideSeries(self,index,parent):
         async def internals():
@@ -529,12 +528,12 @@ You should only use this option if a file fails to download or is moved/deleted 
     
     def watchfile(self,filepath):
         if os.path.exists(filepath):
-            if sys.platform.startswith('darwin'):
-                subprocess.Popen(('open', filepath))
-            elif os.name == 'nt':
+            if sys.platform == 'darwin':
+                subprocess.call('open "{}"'.format(filepath), shell=True)
+            elif sys.platform == 'win32':
                 os.startfile(filepath)
-            elif os.name == 'posix':
-                subprocess.Popen(('xdg-open', filepath))
+            else:
+                subprocess.call('xdg-open "{}"'.format(filepath), shell=True)
         else:
             return -1
             
@@ -887,6 +886,7 @@ You should only use this option if a file fails to download or is moved/deleted 
             ''' also sets the icons '''
             user_settings = self._sqlManager.getSettings()
             if os.name == 'nt' and user_settings['Poster Icons'] and self._anidb_delay <= ANIDB_DEFAULT_DELAY: # only works on windows.
+                import makeico
                 newIcons = self._sqlManager.getOutdatedPosters()
 
                 '''hashes the selected files, also downloads poster art if applicable'''
@@ -1102,6 +1102,7 @@ class SettingsDialog(QtWidgets.QDialog):
     def __init__(self,initialSettings, startupSettings, parent=None):
         from PyQt5.QtCore import Qt
         super(SettingsDialog, self).__init__(parent)
+        self.parent=parent
         self.result=None
         self.setWindowTitle(self.tr("User Settings"))
         self.setWindowFlags(self.windowFlags() &~ Qt.WindowContextHelpButtonHint)
@@ -1222,10 +1223,12 @@ class SettingsDialog(QtWidgets.QDialog):
         return self.result
 
     def folderSelect(self,destInput):
-        folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Open Directory",
-                                                   ".",
-                                                   QtWidgets.QFileDialog.ShowDirsOnly|
-                                                   QtWidgets.QFileDialog.DontResolveSymlinks)
+        flags = QtWidgets.QFileDialog.ShowDirsOnly | QtWidgets.QFileDialog.DontResolveSymlinks
+        if sys.platform != 'win32':
+            flags |= QtWidgets.QFileDialog.DontUseNativeDialog
+        folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Choose Directory",
+                                                   storage_path("."),
+                                                   flags)
         if folder:
             destInput.setText(folder)
 
@@ -1518,7 +1521,7 @@ if __name__ == '__main__':
 
     treeView.setIndentation(delegate.getHeaderHeight(treeView.fontMetrics()))
     treeView.setModel(model)
-    ss = "QTreeView {{ background-color: rgb{}; color: rgb{} }}".format(COLORSCHEME['main_window_background'].getRgb(),COLORSCHEME['main_window_lines'].getRgb())
+    ss = "QTreeView {{ background-color: rgb{}; color: rgb{}; selection-background-color: transparent; }}".format(COLORSCHEME['main_window_background'].getRgb(),COLORSCHEME['main_window_lines'].getRgb())
     ss += "\n* {{ {} {} {} }}".format("color: rgb{};".format(COLORSCHEME['dialog_text'].getRgb()) if 'dialog_text' in COLORSCHEME else "",
                                       "background-color: rgb{};".format(COLORSCHEME['dialog_background'].getRgb()) if 'dialog_background' in COLORSCHEME else "",
                                       "selection-background-color: rgb{};".format(COLORSCHEME['selection_background'].getRgb()) if 'selection_background' in COLORSCHEME else "",
