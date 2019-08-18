@@ -26,6 +26,21 @@ import asyncio
 import errno
 from constants import *
 
+def set_registry(windows_startup, minimized):
+    if os.name=='nt':
+        settings = QtCore.QSettings(r"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run", QtCore.QSettings.NativeFormat)
+        if windows_startup:
+            try:
+                sys._MEIPASS
+                cmd = '"{}"'.format(sys.executable)
+            except:
+                cmd = '"{}"'.format(__file__)
+            if minimized:
+                cmd += ' -q'
+            settings.setValue("Alastore",cmd)
+        else:
+            settings.remove("Alastore")
+            
 class Node(object):
     def __init__(self, data, parent=None):
         self._data = data
@@ -444,19 +459,12 @@ You should only use this option if a file fails to download or is moved/deleted 
         d=SettingsDialog(settings,startupsettings,parent)
         d.exec_()
         if d.getValues():
+            print(d.getValues())
             settings_dict = d.getValues()
             async with self.async_writelock:
-                self._sqlManager.saveSettings(*[settings_dict[key] for key in self._sqlManager.COLUMN_NAMES])
+                self._sqlManager.saveSettings(*[settings_dict[key] for key in COLUMN_NAMES])
                 self._sqlManager.setStartupSettings(settings_dict['start_with_windows'],settings_dict['start_hidden'])
-                if os.name=='nt':
-                    settings = QtCore.QSettings(r"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run", QtCore.QSettings.NativeFormat)
-                    if int(settings_dict['start_with_windows']) == 2:
-                        cmd = '"{}"'.format(sys.argv[0])
-                        if int(settings_dict['start_hidden']) == 2:
-                            cmd += ' -q'
-                        settings.setValue("Alastore",cmd)
-                    else:
-                        settings.remove("Alastore")
+                set_registry(int(settings_dict['start_with_windows']), int(settings_dict['start_hidden']))
         d.deleteLater()
 
     def quickUpdate(self):
@@ -1313,15 +1321,6 @@ Are you sure you want to drop %s?'''%(title,title),None)
         self.delete=self.deleteall.checkState()
         self.confirm = 1
         self.close()
-        
-def resource_path(relative_path):
-    """ Get absolute path to resource, works for dev and for PyInstaller """
-    try:
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(".")
-    return os.path.join(base_path, relative_path)
 
 from qtrayico import HideableWindow
 
@@ -1457,7 +1456,7 @@ if __name__ == '__main__':
     import os,sys
     import configparser
     config = configparser.ConfigParser()
-    config.read(resource_path('alastore_theme.ini'))
+    config.read(storage_path('alastore_theme.ini'))
     if 'COLOR_SCHEME' not in config:
         print('alastore_theme.ini is missing!')
         exit(2)
@@ -1536,15 +1535,7 @@ if __name__ == '__main__':
     main.setCentralWidget(treeView)
 
     settings_dict = sqlmanager.getStartupSettings()
-    if os.name=='nt':
-        settings = QtCore.QSettings(r"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run", QtCore.QSettings.NativeFormat)
-        if int(settings_dict['start_with_windows']) == 2:
-            cmd = '"{}"'.format(sys.argv[0])
-            if int(settings_dict['start_hidden']) == 2:
-                cmd += ' -q'
-            settings.setValue("Alastore",cmd)
-        else:
-            settings.remove("Alastore")
+    set_registry(int(settings_dict['start_with_windows']), int(settings_dict['start_hidden']))
     if '-q' not in sys.argv and '/q' not in sys.argv and '/silent' not in sys.argv and 0==int(settings_dict['start_hidden']):
         main.show()
     app.setQuitOnLastWindowClosed(False)
