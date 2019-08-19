@@ -361,7 +361,7 @@ class TreeModel(QtCore.QAbstractItemModel):
             if sys.platform == 'darwin':
                 subprocess.call('open "{}"'.format(os.path.dirname(toopen)), shell=True)
             if sys.platform == 'win32':
-                subprocess.call(['explorer','/select','"{}"'.format(toopen)])
+                subprocess.call('explorer /select,"{}"'.format(toopen))
             else:
                 subprocess.call('xdg-open "{}"'.format(os.path.dirname(toopen)), shell=True)
         
