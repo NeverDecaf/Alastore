@@ -4,5 +4,10 @@ REM pyi-makespec --onefile --noconsole --name=Alastore --icon=book.ico Alastore.
 REM added [(r'book.ico',r'book.ico','DATA')] as an arg to EXE() in the spec
 
 REM C:\Python27\Scripts\pyinstaller --clean --noconfirm Alastore.spec
+
+
+
+call .\venv\Scripts\activate
 DEL .\dist\Alastore.exe
-pyinstaller --clean --noconfirm Alastore.spec
+venv\Scripts\pyinstaller --clean --noconfirm Alastore.spec
+call .\venv\Scripts\deactivate
