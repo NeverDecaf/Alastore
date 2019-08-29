@@ -3,11 +3,9 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import QMutexLocker
 import sys
 import time
-import rss
 import os
 import re
 import io
-import torrentprogress
 from requests.exceptions import ConnectionError
 import anidb
 import datetime
@@ -24,6 +22,7 @@ from quamash import QEventLoop, QThreadExecutor
 import asyncio
 import errno
 from constants import *
+import torrentclient
 
 def set_registry(windows_startup, minimized):
     if os.name=='nt':
@@ -210,6 +209,7 @@ class TreeModel(QtCore.QAbstractItemModel):
         self._shanalink = ShanaLink()
         asyncio.ensure_future(self.first_update())
         asyncio.ensure_future(self.full_update_loop())
+        self.qblink = torrentclient.QBittorrent()
 
     def _updateData(self):
         self.data = self._sqlManager.getSeries()
@@ -244,6 +244,7 @@ class TreeModel(QtCore.QAbstractItemModel):
         try:
             if index.internalPointer().downloaded()>0:
                 user_settings = self._sqlManager.getSettings()
+                self.qblink.set_credentials(user_settings['QBittorrent Username'],user_settings['QBittorrent Password'])
                 if not user_settings['Save Directory']:
                     QtWidgets.QMessageBox.information(None,
                             self.tr("No Settings Found!"),
@@ -259,15 +260,15 @@ class TreeModel(QtCore.QAbstractItemModel):
                             # use aiofiles for file operations. the main slowdown here
                             async def moveAllToFolder(dest_path):
                                 dest = os.path.dirname(dest_path)
-                                episodes = self._sqlManager.getAllWatchedPaths(dest)
+                                episodes = self._sqlManager.getAllWatchedHashes(dest)
                                 for episode in episodes:
-                                    path = episode[0]
+                                    ihash = episode[0]
                                     directory = os.path.dirname(path)
                                     filename = os.path.basename(path)
                                     if directory!=dest and os.path.exists(directory):
                                         destfile = os.path.join(dest,filename)
                                         try:
-                                            await loop.run_in_executor(None,shutil.move,path,destfile)
+                                            await loop.run_in_executor(None,self.qblink.move_and_categorize,ihash,dest)
                                             self._sqlManager.changePath(path,destfile)
                                         except IOError as e:
                                             print('failed to move file: %r'%e)
@@ -296,12 +297,17 @@ class TreeModel(QtCore.QAbstractItemModel):
                             
                             if not os.path.isdir(dest_folder):
                                 await loop.run_in_executor(None,os.makedirs,dest_folder)
-                            if not os.path.exists(dest_file):
+                            movefile = not os.path.exists(dest_file)
+                            if movefile:
                                 await loop.run_in_executor(None,shutil.move,index.internalPointer().path(),dest_file)
                             if syncplayPath:
                                 subprocess.Popen((os.path.join(syncplayPath,'Syncplay.exe'),dest_file))
                             else:
                                 self.watchfile(dest_file)
+                            if movefile:
+                                async def torrentmove():
+                                    self.qblink.move_and_categorize(index.internalPointer().torrent_url(),dest_folder)
+                                await torrentmove()
                             # we also want to get the ed2k hash asap in case you decide to drop the series right after watching an episode.
                             try:
                                 ed2k,filesize=None,None
@@ -727,36 +733,29 @@ You should only use this option if a file fails to download or is moved/deleted 
 
         async def get_new_from_rss():
             '''parse your rss and find new files; for each file download the torrent file'''
+            'dont get from rss, instead get from qbittorrent (via rss)'
             user_settings = self._sqlManager.getSettings()
-            reader = rss.RSSReader()
-            feed_url = user_settings['RSS Feed']
-            rssitems = await loop.run_in_executor(None,lambda: reader.getFiles(feed_url))## WEB-DEPENDENT ( but handles exceptions itself )
+            self.qblink.set_credentials(user_settings['QBittorrent Username'],user_settings['QBittorrent Password'])
+            try:
+                rssitems = await loop.run_in_executor(None,self.qblink.get_active_torrents)## WEB-DEPENDENT ( but handles exceptions itself )
+            except Exception as e:
+                print('Failed to get torrents from qbittorrent (%r)'%e)
+                rssitems = []
+##            use torrent infohash instead of url now.
             async with self.async_writelock:
                 torrentBlacklist = self._sqlManager.getTorrentBlacklist()
+
             for item in rssitems:
-                if item[2] not in torrentBlacklist:
-                                                                                                #file name, rsstitle,torrent url 
-                    if self._sqlManager.addEpisode(os.path.join(user_settings['Download Directory'],item[1]),item[0],item[2]):
-                        torrent_url=item[2]
-                        torrentdata = await loop.run_in_executor(None,torrentprogress.download_torrent,torrent_url) ## WEB-DEPENDENT ( but handles exceptions itself )
-                        if torrentdata:
-                            try:
-                                filename = torrentprogress.file_name(io.BytesIO(torrentdata))
-                            except torrentprogress.BatchTorrentException as e:
-                                print('initial bencode failed %r'%e)
-                                print('episode (%s) was removed and blacklisted.'%item[1])
-                                async with self.async_writelock:
-                                    self._sqlManager.removeEpisode(item[2],permablacklist=True)
-                            except Exception as e:
-                                print('initial bencode failed %r'%e)
-                                print('pre-removing %s.'%item[1])
-                                async with self.async_writelock:
-                                    self._sqlManager.removeEpisode(item[2],len(torrentdata)) # if torrentdata is len(0) don't blacklist <== this state is impossible to reach
-                            else:
-                                path = os.path.join(user_settings['Download Directory'],filename)
-                                async with self.async_writelock:
-                                    self._sqlManager.addTorrentData(path,item[2],torrentdata,filename)
-                                self.sqlDataChanged()
+                data = item.get_data()
+                if data[2] not in torrentBlacklist:
+                    # rsstitle no longer used as it would only be accurate for shanaproject
+                                                                                                #file name, rsstitle,torrent url + download dir, progress (0-1)
+                    async with self.async_writelock:
+                        path = os.path.join(data[3],data[0])
+                        if self._sqlManager.addEpisode(path,*(item.get_add_args())):
+                            self._sqlManager.addTorrentData(path,data[2],None,data[0])
+                            self.sqlDataChanged()
+##                        print('add fail')
 
         async def anidb_adds():
             async with self.async_writelock:
@@ -802,45 +801,19 @@ You should only use this option if a file fails to download or is moved/deleted 
         async def check_file_changes():
             # this is the file update (the part that should run when you pick the context menu option)
             user_settings = self._sqlManager.getSettings()
+            self.qblink.set_credentials(user_settings['QBittorrent Username'],user_settings['QBittorrent Password'])
             allseries = self._sqlManager.getDownloadingSeries()
-            dl_dir = user_settings['Download Directory']
-            # we replace space with _ here, make sure to do this to all the strings you want to match.
-            originalFiles = os.listdir(dl_dir)
-            potentialFiles = [re.sub(r'[ ]+',r'_',x) for x in originalFiles]
-            potentialMatches = dict(list(zip(potentialFiles,originalFiles)))
             for series in list(allseries.values()):
                 for episode in series:
-                    pattern,replacement = rss.RSSReader.invalidCharReplacement(user_settings['RSS Feed'])                    
-                    workingFile = re.sub(pattern,replacement,episode['file_name'])
-                    if workingFile in potentialMatches:
-                        filename = potentialMatches[workingFile]
-                        path=os.path.join(dl_dir,filename)
-                        torrentdata=episode['torrent_data']
-                        percent_downloaded=episode['download_percent']
-                        if not torrentdata:
-                            torrent = await loop.run_in_executor(None,torrentprogress.download_torrent,episode['torrent_url'])
-                            if torrent:
-                                torrentdata=torrent
-                        if torrentdata:
-                            try:
-                                result = await loop.run_in_executor(None,torrentprogress.percentCompleted,io.BytesIO(torrentdata),path)
-                                percent_downloaded, torrentdata = result
-                            except torrentprogress.BatchTorrentException as e:
-                                print('bencode failed %r'%e)
-                                print('episode (%s) was removed and blacklisted.'%episode['display_name'])
-                                async with self.async_writelock:
-                                    self._sqlManager.removeEpisode(episode['torrent_url'],permablacklist=True)
-                                continue
-                            except Exception as e:
-                                print('bencode failed %r'%e)
-                                print('episode (%s) was removed.'%episode['display_name'])
-                                async with self.async_writelock:
-                                    self._sqlManager.removeEpisode(episode['torrent_url'],len(torrentdata))
-                                continue
-                            async with self.async_writelock:
-                                self._sqlManager.setDownloading(episode['torrent_url'],filename,torrentdata,percent_downloaded)
+                    try:
+                        percent_downloaded = int(100*self.qblink.get_progress(episode['torrent_url'])) # really this is the hash
+                    except:
+                        percent_downloaded = 0
+                    async with self.async_writelock:
+                        self._sqlManager.setDownloading(episode['torrent_url'],None,percent_downloaded)
             if len(allseries):
                 self.sqlDataChanged()
+                
         async def get_series_info():
             if time.time() - self._anidb_delay > self._last_anidb_info:
                 self._last_anidb_info = time.time()
@@ -945,7 +918,6 @@ You should only use this option if a file fails to download or is moved/deleted 
                             self._sqlManager.updateOneUnknownAid()
                     # check for downloaded files
                     # await check_file_changes()
-                    
                     if not quick:
                         # get anidb info for new series
                         await get_series_info()
@@ -1124,28 +1096,33 @@ class SettingsDialog(QtWidgets.QDialog):
 
         self.options = {}
 
-        self.options['RSS Feed'] = QtWidgets.QLineEdit()
-        self.options['RSS Feed'].setPlaceholderText("Paste your private RSS feed here.")
-        optionsLayout.addRow("Private RSS Feed",self.options['RSS Feed'])
+##        self.options['RSS Feed'] = QtWidgets.QLineEdit()
+##        self.options['RSS Feed'].setPlaceholderText("Paste your private RSS feed here.")
+##        optionsLayout.addRow("Private RSS Feed",self.options['RSS Feed'])
 
         
-        fileSelect=QtWidgets.QWidget()
-        fileSelectLayout=QtWidgets.QGridLayout()
-        fileSelect.setLayout(fileSelectLayout)
+##        fileSelect=QtWidgets.QWidget()
+##        fileSelectLayout=QtWidgets.QGridLayout()
+##        fileSelect.setLayout(fileSelectLayout)
+##
+##        self.options['Download Directory']=QtWidgets.QLineEdit()
+##        self.options['Download Directory'].setPlaceholderText("Source Directory")
+##        self.dlBrowse=QtWidgets.QPushButton('&Browse')
+##
+##        self.dlBrowse.released.connect(lambda:self.folderSelect(self.options['Download Directory']))
+##        
+##        fileSelectLayout.addWidget(self.options['Download Directory'],0,0)
+##        fileSelectLayout.addWidget(self.dlBrowse,0,1)
+##        optionsLayout.addRow("Download Directory",fileSelect)
+##
+##        fileSelectLayout.setContentsMargins(0, 0, 0, 0)
+##        fileSelect.setContentsMargins(0, 0, 0, 0)
+        self.options['QBittorrent Username'] = QtWidgets.QLineEdit()
+        optionsLayout.addRow("QBittorrent Username",self.options['QBittorrent Username'])
 
-        self.options['Download Directory']=QtWidgets.QLineEdit()
-        self.options['Download Directory'].setPlaceholderText("Source Directory")
-        self.dlBrowse=QtWidgets.QPushButton('&Browse')
-
-        self.dlBrowse.released.connect(lambda:self.folderSelect(self.options['Download Directory']))
-        
-        fileSelectLayout.addWidget(self.options['Download Directory'],0,0)
-        fileSelectLayout.addWidget(self.dlBrowse,0,1)
-        optionsLayout.addRow("Download Directory",fileSelect)
-
-        fileSelectLayout.setContentsMargins(0, 0, 0, 0)
-        fileSelect.setContentsMargins(0, 0, 0, 0)
-
+        self.options['QBittorrent Password'] = QtWidgets.QLineEdit()
+        self.options['QBittorrent Password'].setEchoMode(QtWidgets.QLineEdit.Password)
+        optionsLayout.addRow("QBittorrent Password",self.options['QBittorrent Password'])
 
         fileSelect=QtWidgets.QWidget()
         fileSelectLayout=QtWidgets.QGridLayout()
@@ -1214,6 +1191,7 @@ class SettingsDialog(QtWidgets.QDialog):
         self.setLayout(mainLayout)
 
         for key in initialSettings.keys():
+            if key not in ('RSS Feed','Download Directory'):
                 if isinstance(self.options[key], QtWidgets.QCheckBox):
                         self.options[key].setCheckState(initialSettings[key])
                 else:

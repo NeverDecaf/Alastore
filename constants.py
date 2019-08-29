@@ -1,9 +1,13 @@
 import sys,os,re
-##try:
-##    sys._MEIPASS
-##    os.chdir(os.path.dirname(sys.executable))
-##except:
-##    os.chdir(os.path.dirname(os.path.realpath(__file__)))    
+import logging
+# set logging levels
+logging.getLogger('requests').setLevel(logging.ERROR)
+logging.getLogger('urllib3').setLevel(logging.ERROR)
+#torrentclient
+TORRENTC_CATEGORY = 'Alastore'
+TORRENTC_LIMIT = 500
+TORRENTC_WATCHED_CATEGORY = 'Alastore (watched)'
+WEBUI_URL = 'http://localhost:8080'
 
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
@@ -72,9 +76,9 @@ AID_UPDATE_TIME=ONE_DAY#exception
 '''time before bad torrent entries are removed from blacklist'''
 BLACKLIST_UPDATE_TIME=ONE_DAY#exception
 
-COLUMN_NAMES = ['RSS Feed','Download Directory','Save Directory','anidb Username','anidb Password','Season Sort','Poster Icons','Auto Hide Old','Shana Project Username','Shana Project Password']
-
-RSS_TITLE_RE = re.compile('.*(?= - \d)') #title as given in rss feed.
+COLUMN_NAMES = ['RSS Feed','Download Directory','Save Directory','anidb Username','anidb Password',
+                'Season Sort','Poster Icons','Auto Hide Old','Shana Project Username','Shana Project Password',
+                'QBittorrent Username','QBittorrent Password']
 
 #Alastore:
 FULLUPDATE_TIME = 60 * 10 #once every 10 m
@@ -82,3 +86,5 @@ INITIALUPDATE_GRACEPERIOD = 30 # this is time before the first (only) quick upda
 FULLUPDATE_GRACEPERIOD = 60*5 # 5m time before first full update
 ANIDB_DEFAULT_DELAY = 675
 ANIDB_MAX_DELAY = ONE_DAY*4 # 4 days
+
+

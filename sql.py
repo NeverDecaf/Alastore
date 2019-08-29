@@ -3,7 +3,6 @@ import os.path
 import re
 import urllib.parse
 from StringMatcher import StringMatcher
-from rss import RSSReader
 from collections import defaultdict
 import asyncio
 from constants import *
@@ -12,8 +11,6 @@ class SQLManager:
     conn=None
     cursor=None
     db=None
-    EPISODE_NUM = re.compile('(?<= - )(\d+\.?\d*)') #make sure you get the last one [-1]
-    SUBGROUP = re.compile('(?<=\[)[^\]]*(?=])')#make sure you get the last one [-1]
     
     # init. supply the name of the db.
     def __init__(self, db=storage_path('Alastore.db'), createtables = False):
@@ -52,6 +49,7 @@ class SQLManager:
     
     # Creates all the tables we will be using. can be called each connect just for safety.
     def _createTables(self):
+        print('creating tables')
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS titles
                  (aid integer, type text, lang text, title text PRIMARY KEY)''')
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS user_settings
@@ -90,15 +88,22 @@ class SQLManager:
             self.cursor.execute('''ALTER TABLE user_settings ADD COLUMN start_with_windows int DEFAULT 0''')
         except sqlite3.OperationalError:
             pass # col exists
+        try:
+            self.cursor.execute('''ALTER TABLE user_settings ADD COLUMN qbittorrent_username text DEFAULT '' ''')
+        except sqlite3.OperationalError:
+            print('oh no')
+            pass # col exists
+        try:
+            self.cursor.execute('''ALTER TABLE user_settings ADD COLUMN qbittorrent_password text DEFAULT '' ''')
+        except sqlite3.OperationalError:
+            pass # col exists
         self.conn.commit()
 
     # saves the supplied user settings into the db.
-    def saveSettings(self, rss_url, download_directory, store_directory, anidb_username, anidb_password, sort_by_season, custom_icons, auto_hide_old, shanaproject_username, shanaproject_password):
-        rss_url = RSSReader.cleanUrl(rss_url)
-##        t = urlparse.urlsplit(rss_url)
-##        rss_url = urlparse.urlunsplit(t[:3]+('show_all',''))
-        self.cursor.execute('''REPLACE INTO user_settings (id, rss, dl_dir, st_dir, anidb_username, anidb_password, season_sort,custom_icons,title_update,dont_show_again,auto_hide_old,shanaproject_username,shanaproject_password) VALUES
-                                (?,?,?,?,?,?,?,?,COALESCE((SELECT title_update FROM user_settings WHERE id=0),0),COALESCE((SELECT dont_show_again FROM user_settings WHERE id=0),0),?,?,?)''',
+    def saveSettings(self, rss_url, download_directory, store_directory, anidb_username, anidb_password, sort_by_season, custom_icons, auto_hide_old, shanaproject_username, shanaproject_password, qbittorrent_username, qbittorrent_password):
+##        rss_url = RSSReader.cleanUrl(rss_url)
+        self.cursor.execute('''REPLACE INTO user_settings (id, rss, dl_dir, st_dir, anidb_username, anidb_password, season_sort,custom_icons,title_update,dont_show_again,auto_hide_old,shanaproject_username,shanaproject_password,qbittorrent_username,qbittorrent_password) VALUES
+                                (?,?,?,?,?,?,?,?,COALESCE((SELECT title_update FROM user_settings WHERE id=0),0),COALESCE((SELECT dont_show_again FROM user_settings WHERE id=0),0),?,?,?,?,?)''',
                             (0, rss_url, download_directory, store_directory, anidb_username, anidb_password,sort_by_season,custom_icons,auto_hide_old,shanaproject_username,shanaproject_password))
         self.conn.commit()
 
@@ -108,16 +113,17 @@ class SQLManager:
     def getSettings(self,raw=False,fetchanyway=False):
         if raw:
             self.cursor.execute('''SELECT rss AS "{}", dl_dir AS "{}", st_dir AS "{}", anidb_username AS "{}", anidb_password AS "{}", season_sort AS "{}",
-custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shanaproject_password AS "{}" FROM user_settings WHERE id=0'''.format(*COLUMN_NAMES))
+custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shanaproject_password AS "{}", qbittorrent_username AS "{}", qbittorrent_password AS "{}" FROM user_settings WHERE id=0'''.format(*COLUMN_NAMES))
         else:
             self.cursor.execute('''SELECT rss AS "{}", expandvars(dl_dir) AS "{}", expandvars(st_dir) AS "{}", anidb_username AS "{}", anidb_password AS "{}", season_sort AS "{}",
-custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shanaproject_password AS "{}" FROM user_settings WHERE id=0'''.format(*COLUMN_NAMES))
+custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shanaproject_password AS "{}", qbittorrent_username AS "{}", qbittorrent_password AS "{}" FROM user_settings WHERE id=0'''.format(*COLUMN_NAMES))
         settings = self.cursor.fetchone()
         if fetchanyway:
             return settings
         if not settings:
             return None
-        if not settings['RSS Feed'] and not settings['Download Directory'] and not settings['Save Directory']:
+##        if not settings['RSS Feed'] and not settings['Download Directory'] and not settings['Save Directory']:
+        if not settings['Save Directory']:
             return None
         #expand environment vars in the paths.
         return settings
@@ -203,33 +209,34 @@ custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shan
                             (path,torrentdata,filename,torrenturl))
         self.conn.commit()
                         
-    def addEpisode(self,path,rssTitle,torrenturl,watched=0):
+    def addEpisode(self,path,display_name,series_title,episode_no,subgroup,torrenturl,watched=0):
         '''parse the path into relevant stuff, use rssTitle to match against shana_title db'''
         '''return 1 if something has changed, 0 if not'''
         file_name = os.path.basename(path)
-        try:
-            episode = self.EPISODE_NUM.findall(rssTitle)[-1]
-        except Exception as e:
-            'no episode number means this is a pv or op/ed or something we should just ignore.'
-            return 0
-        display_name = rssTitle
-        rss_title = RSS_TITLE_RE.findall(rssTitle)[0]
-        try:
-            subgroup = self.SUBGROUP.findall(rssTitle)[-1]
-        except IndexError:
-            subgroup = None
-        self.cursor.execute('''SELECT id FROM shana_series WHERE title=?''',(rss_title,))
+##        try:
+##            episode = self.EPISODE_NUM.findall(rssTitle)[-1]
+##        except Exception as e:
+##            'no episode number means this is a pv or op/ed or something we should just ignore.'
+##            return 0
+        # gets both display_name and rss_title from titel
+##        display_name = rssTitle
+##        rss_title = RSS_TITLE_RE.findall(rssTitle)[0]
+##        try:
+##            subgroup = self.SUBGROUP.findall(rssTitle)[-1]
+##        except IndexError:
+##            subgroup = None
+        self.cursor.execute('''SELECT id FROM shana_series WHERE title=?''',(series_title,))
         lid = self.cursor.fetchone()#format is (lid,)
         if lid==None:
-            self.cursor.execute('''INSERT INTO shana_series (title) VALUES (?)''', (rss_title,))
+            self.cursor.execute('''INSERT INTO shana_series (title) VALUES (?)''', (series_title,))
             self.conn.commit()
-            self.cursor.execute('''SELECT id FROM shana_series WHERE title=?''',(rss_title,))
+            self.cursor.execute('''SELECT id FROM shana_series WHERE title=?''',(series_title,))
             lid = self.cursor.fetchone()['id']
         else:
             lid=lid['id']
         try:
             self.cursor.execute('''INSERT INTO episode_data (id,file_name,episode,path,display_name,watched,subgroup,torrent) VALUES (?,?,?,?,?,?,?,?)''',
-                                                            (lid,file_name,episode,path,display_name,watched,subgroup,torrenturl))#downloaded,torrent_data,download_percent omitted
+                                                            (lid,file_name,episode_no,path,display_name,watched,subgroup,torrenturl))#downloaded,torrent_data,download_percent omitted
         except sqlite3.IntegrityError as msg:
             self.conn.commit()
             'means it already exists'
@@ -275,15 +282,14 @@ SELECT aid FROM (
     ) WHERE dist <= goaldist ORDER BY dist ASC, aid DESC LIMIT 1) where title=?''',[title['title']]*2)
         self.conn.commit()
     
-    def setDownloading(self,torrent_url,filename,torrentdata,percent_downloaded):
-        path=(os.path.join(self.getSettings()['Download Directory'],filename))
+    def setDownloading(self,torrent_url,torrentdata,percent_downloaded):
         '''given the local id and episode number, mark an episode as downloaded. If download is complete, delete torrent data from db to reclaim space.'''
         downloaded=0
         if percent_downloaded==100:
             downloaded=1
         if downloaded:
             torrentdata = None
-        self.cursor.execute('''UPDATE episode_data SET downloaded=?,file_name=?,path=?,torrent_data=?,download_percent=? WHERE torrent=?''',(downloaded,filename,path,torrentdata,percent_downloaded,torrent_url))
+        self.cursor.execute('''UPDATE episode_data SET downloaded=?,download_percent=? WHERE torrent=?''',(downloaded,percent_downloaded,torrent_url))
         self.conn.commit()
 
     def getAllWatchedPaths(self,path):
@@ -292,15 +298,21 @@ SELECT aid FROM (
         self.cursor.execute('''SELECT path from episode_data WHERE id=(SELECT id FROM episode_data WHERE path=? LIMIT 1) AND watched=1 AND downloaded=1''',(path,))
         return set([r['path'] for r in self.cursor.fetchall()])
 
+    def getAllWatchedHashes(self,path):
+        '''gets a list of hashes for all watched files/episodes for series matching the given filepath'''
+##        self.cursor.execute('''SELECT path from episode_data WHERE id=? AND watched=1 AND downloaded=1''',(id,))
+        self.cursor.execute('''SELECT torrent from episode_data WHERE id=(SELECT id FROM episode_data WHERE path=? LIMIT 1) AND watched=1 AND downloaded=1''',(path,))
+        return set([r['torrent'] for r in self.cursor.fetchall()])
+    
     def getAllPaths(self,id):
         '''gets a list of paths for all files/episodes for series with given id'''
         self.cursor.execute('''SELECT path from episode_data JOIN shana_series WHERE shana_series.id=episode_data.id AND shana_series.id=? AND downloaded=1''',(id,))
         return set([r['path'] for r in self.cursor.fetchall()])
         
-    def changePath(self,oldPath,newPath):
+    def changePath(self,ihash,newPath):
         '''given the local id and episode number, change the path.'''
-        self.cursor.execute('''UPDATE episode_data SET path=? WHERE path=?''',(newPath,oldPath))
-        self.cursor.execute('''UPDATE parse_data SET path=? WHERE path=?''',(newPath,oldPath))
+        self.cursor.execute('''UPDATE episode_data SET path=? WHERE torrent=?''',(newPath,ihash))
+        self.cursor.execute('''UPDATE parse_data SET path=? WHERE torrent=?''',(newPath,ihash))
         self.conn.commit()
         
     def updateCoverArts(self,pairs):

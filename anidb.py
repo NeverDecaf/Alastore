@@ -31,7 +31,10 @@ RETURN_CODES={
     502:'ACCESS DENIED',
     506:'INVALID SESSION',
     }
+NERFED = 0 # set true to disable for testing
 def anidb_series_info(aid):
+    if NERFED:
+        return None,None
     global GLOBAL_ANIDB_TIMER,ANIDB_RATE_LIMIT
     # returns None,None if you are banned
     url='http://api.anidb.net:9001/httpapi?request=anime&client=%s&clientver=%s&protover=1&aid=%s'%(CLIENT,CLIENTVER,aid)
@@ -59,6 +62,8 @@ def anidb_series_info(aid):
     return (airdate,imageurl)
 
 def anidb_title_list():
+    if NERFED:
+        return []
     global GLOBAL_ANIDB_TIMER,ANIDB_RATE_LIMIT
     time.sleep(max(ANIDB_RATE_LIMIT-time.time()+GLOBAL_ANIDB_TIMER,0))
     response = requests.get('http://anidb.net/api/anime-titles.xml.gz',headers=ANIDB_FAKE_HEADERS)
@@ -85,6 +90,8 @@ def anidb_title_list():
     return titles
 
 def anidb_dl_poster_art(imageurl):
+    if NERFED:
+        return None
     global GLOBAL_ANIDB_TIMER,ANIDB_RATE_LIMIT
     time.sleep(max(ANIDB_RATE_LIMIT-time.time()+GLOBAL_ANIDB_TIMER,0))
     response = requests.get(imageurl,headers=ANIDB_FAKE_HEADERS)
@@ -104,8 +111,11 @@ class anidbInterface:
     socket=None
     SK=None
     def __init__(self,port=LOCALPORT):
+        if NERFED:
+            return None
         self.LOCALPORT=port
         self._setup()
+        
             
 ##    ERROR_FILE = 'anidb_failed_mylist_adds.log'
 ##    def report_failure(path,s=None,reason=None):
