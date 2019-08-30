@@ -471,7 +471,8 @@ You should only use this option if a file fails to download or is moved/deleted 
         if d.getValues():
             settings_dict = d.getValues()
             async with self.async_writelock:
-                self._sqlManager.saveSettings(*[settings_dict[key] for key in COLUMN_NAMES])
+##                self._sqlManager.saveSettings(None,None,*[settings_dict[key] for key in COLUMN_NAMES])
+                self._sqlManager.saveSettings(settings_dict)
                 self._sqlManager.setStartupSettings(settings_dict['start_with_windows'],settings_dict['start_hidden'])
                 set_registry(int(settings_dict['start_with_windows']), int(settings_dict['start_hidden']))
         d.deleteLater()
@@ -736,6 +737,7 @@ You should only use this option if a file fails to download or is moved/deleted 
             'dont get from rss, instead get from qbittorrent (via rss)'
             user_settings = self._sqlManager.getSettings()
             self.qblink.set_credentials(user_settings['QBittorrent Username'],user_settings['QBittorrent Password'])
+            
             try:
                 rssitems = await loop.run_in_executor(None,self.qblink.get_active_torrents)## WEB-DEPENDENT ( but handles exceptions itself )
             except Exception as e:
@@ -1217,6 +1219,7 @@ class SettingsDialog(QtWidgets.QDialog):
                         self.result[key] = self.options[key].checkState()
                 else:
                         self.result[key] = str(self.options[key].text())# or None
+        print(self.result)
         self.close()
         
 class StillRunningDialog(QtWidgets.QDialog):

@@ -116,20 +116,20 @@ class QBittorrent(object):
                     self._episode_no_from_torrent(),
                     self._subgroup_name_from_torrent(),
                     self.data[2])
-        def series_title_from_torrent(self):
+        def _series_title_from_torrent(self):
             'use data from get_active_torrents'
             return self.RSS_TITLE_RE.findall(self.data[1])[0]
-        def display_name_from_torrent(self):
-            return '{} - {} [{}]({})'.format(self.series_title_from_torrent(self.data),
-                                     self.episode_no_from_torrent(self.data),
+        def _display_name_from_torrent(self):
+            return '{} - {} [{}]({})'.format(self._series_title_from_torrent(),
+                                     self._episode_no_from_torrent(),
                                      self.RESOLUTION.findall(self.data[1])[-1],
-                                     self.subgroup_name_from_torrent(self.data))
-        def episode_no_from_torrent(self):
+                                     self._subgroup_name_from_torrent())
+        def _episode_no_from_torrent(self):
             try:
                 return self.EPISODE_NUM.findall(self.data[1])[-1]
             except IndexError:
                 return 0 # pv,op,ed, 0 means it will be ignored.
-        def subgroup_name_from_torrent(self):
+        def _subgroup_name_from_torrent(self):
             try:
                 return self.SUBGROUP.findall(self.data[1])[-1]
             except IndexError:

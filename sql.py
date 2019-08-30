@@ -49,7 +49,6 @@ class SQLManager:
     
     # Creates all the tables we will be using. can be called each connect just for safety.
     def _createTables(self):
-        print('creating tables')
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS titles
                  (aid integer, type text, lang text, title text PRIMARY KEY)''')
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS user_settings
@@ -91,7 +90,6 @@ class SQLManager:
         try:
             self.cursor.execute('''ALTER TABLE user_settings ADD COLUMN qbittorrent_username text DEFAULT '' ''')
         except sqlite3.OperationalError:
-            print('oh no')
             pass # col exists
         try:
             self.cursor.execute('''ALTER TABLE user_settings ADD COLUMN qbittorrent_password text DEFAULT '' ''')
@@ -100,11 +98,11 @@ class SQLManager:
         self.conn.commit()
 
     # saves the supplied user settings into the db.
-    def saveSettings(self, rss_url, download_directory, store_directory, anidb_username, anidb_password, sort_by_season, custom_icons, auto_hide_old, shanaproject_username, shanaproject_password, qbittorrent_username, qbittorrent_password):
+    def saveSettings(self, settings_dict):
 ##        rss_url = RSSReader.cleanUrl(rss_url)
+        as_list = [settings_dict.get(key,None) for key in COLUMN_NAMES]
         self.cursor.execute('''REPLACE INTO user_settings (id, rss, dl_dir, st_dir, anidb_username, anidb_password, season_sort,custom_icons,title_update,dont_show_again,auto_hide_old,shanaproject_username,shanaproject_password,qbittorrent_username,qbittorrent_password) VALUES
-                                (?,?,?,?,?,?,?,?,COALESCE((SELECT title_update FROM user_settings WHERE id=0),0),COALESCE((SELECT dont_show_again FROM user_settings WHERE id=0),0),?,?,?,?,?)''',
-                            (0, rss_url, download_directory, store_directory, anidb_username, anidb_password,sort_by_season,custom_icons,auto_hide_old,shanaproject_username,shanaproject_password))
+                                (0,?,?,?,?,?,?,?,COALESCE((SELECT title_update FROM user_settings WHERE id=0),0),COALESCE((SELECT dont_show_again FROM user_settings WHERE id=0),0),?,?,?,?,?)''',as_list)
         self.conn.commit()
 
     # returns a dict of all settings, keys are the full name of each setting, which can be used directly in a GUI.
