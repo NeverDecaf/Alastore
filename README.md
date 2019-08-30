@@ -10,6 +10,7 @@ This branch uses the QBittorrent Web UI to interface directly with your torrent 
 - QBittorrent v4.1+ is required to have access to the RSS api.
 #### Setup
 - In QBittorrent options, enable the Web UI and ensure the port is 8080. Alastore will connect via http://localhost:8080
-- Add your RSS feed and name it `Alastore`
+- Add your RSS feed and name it something beginning with `Alastore`
 - In RSS Downloader settings, set `Assign Category` to `Alastore` (Create the category if necessary)
 - In Alastore Config, you must provide the required settings (username/password may be blank if you checked `Bypass authentication for clients on localhost`
+- Multiple (supported) feeds can be used at once, just make sure they are all prefixed with "Alastore", `Alastore_Shana` for example.

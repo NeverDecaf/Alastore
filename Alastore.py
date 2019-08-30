@@ -1219,7 +1219,6 @@ class SettingsDialog(QtWidgets.QDialog):
                         self.result[key] = self.options[key].checkState()
                 else:
                         self.result[key] = str(self.options[key].text())# or None
-        print(self.result)
         self.close()
         
 class StillRunningDialog(QtWidgets.QDialog):
