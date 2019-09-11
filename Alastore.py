@@ -299,14 +299,18 @@ class TreeModel(QtCore.QAbstractItemModel):
                                 await loop.run_in_executor(None,os.makedirs,dest_folder)
                             movefile = not os.path.exists(dest_file)
                             if movefile:
-                                await loop.run_in_executor(None,shutil.move,index.internalPointer().path(),dest_file)
+                                async def torrentmove():
+                                    self.qblink.move_and_categorize(index.internalPointer().torrent_url(),dest_folder)
+                                try:
+                                    await loop.run_in_executor(None,shutil.move,index.internalPointer().path(),dest_file)
+                                except PermissionError:
+                                    await torrentmove()
+                                    movefile = False
                             if syncplayPath:
                                 subprocess.Popen((os.path.join(syncplayPath,'Syncplay.exe'),dest_file))
                             else:
                                 self.watchfile(dest_file)
                             if movefile:
-                                async def torrentmove():
-                                    self.qblink.move_and_categorize(index.internalPointer().torrent_url(),dest_folder)
                                 await torrentmove()
                             # we also want to get the ed2k hash asap in case you decide to drop the series right after watching an episode.
                             try:
