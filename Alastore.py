@@ -53,6 +53,8 @@ class Node(object):
         
     def watched(self):
         return self._data['watched']
+    def force_watched(self):
+        return self._data['force_watched']
     def title(self):
         return self._data['title']
     def downloaded(self):
@@ -1010,8 +1012,13 @@ class ItemDelegate(QtWidgets.QStyledItemDelegate):
         pen = QPen( COLORSCHEME['main_window_lines'] )
         painter.setRenderHint( painter.Antialiasing, False )
         painter.setPen( pen )
-
-        if index.internalPointer().downloaded():
+        
+        if index.internalPointer().force_watched():
+            fg = COLORSCHEME['forcewatched_text']
+            bg = COLORSCHEME['forcewatched_background']
+            if not index.parent().isValid():
+                bg = COLORSCHEME['forcewatched_header_background']
+        elif index.internalPointer().downloaded():
             if index.internalPointer().watched():
                 fg = COLORSCHEME['watched_text']
                 bg = COLORSCHEME['watched_background']
@@ -1023,16 +1030,10 @@ class ItemDelegate(QtWidgets.QStyledItemDelegate):
                 if not index.parent().isValid():
                     bg = COLORSCHEME['downloaded_header_background']
         else:
-            if index.internalPointer().watched():
-                fg = COLORSCHEME['forcewatched_text']
-                bg = COLORSCHEME['forcewatched_background']
-                if not index.parent().isValid():
-                    bg = COLORSCHEME['forcewatched_header_background']
-            else:
-                fg = COLORSCHEME['downloading_text']
-                bg = COLORSCHEME['downloading_background']
-                if not index.parent().isValid():
-                    bg = COLORSCHEME['downloading_header_background']
+            fg = COLORSCHEME['downloading_text']
+            bg = COLORSCHEME['downloading_background']
+            if not index.parent().isValid():
+                bg = COLORSCHEME['downloading_header_background']
 
         if not index.parent().isValid():
             painter.fillRect( x , y , w , h, bg )

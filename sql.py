@@ -80,6 +80,10 @@ class SQLManager:
                  last_seriesinfo real DEFAULT 0)''')
         self.cursor.execute('''INSERT OR IGNORE INTO anidb_limiting (id) VALUES (0)''')
         try:
+            self.cursor.execute('''ALTER TABLE episode_data ADD COLUMN force_watched int DEFAULT 0''')
+        except sqlite3.OperationalError:
+            pass # col exists
+        try:
             self.cursor.execute('''ALTER TABLE user_settings ADD COLUMN start_hidden int DEFAULT 0''')
         except sqlite3.OperationalError:
             pass # col exists
@@ -147,7 +151,7 @@ custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shan
         self.conn.commit()
     # get a dict of all series by title:episodes
     def getSeries(self, fetchHidden = False):
-        self.cursor.execute('''SELECT shana_series.id as id,file_name,episode,path,display_name,watched,downloaded,subgroup,hidden,torrent as torrent_url,torrent_data,download_percent,title,season FROM
+        self.cursor.execute('''SELECT shana_series.id as id,file_name,episode,path,display_name,watched,downloaded,subgroup,hidden,torrent as torrent_url,torrent_data,download_percent,title,season,force_watched FROM
                         episode_data JOIN shana_series ON shana_series.id=episode_data.id {} ORDER BY episode ASC'''.format('WHERE hidden=0' if not fetchHidden else ''))
         results = self.cursor.fetchall()
         d = defaultdict(list)
@@ -193,9 +197,9 @@ custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shan
     # marks an/all episodes of a series as watched, regardless of file state.
     def forceWatched(self,id=None,torrenturl=None):
         if torrenturl:
-            self.cursor.execute('''UPDATE episode_data SET watched=1 WHERE torrent=?''',(torrenturl,))
+            self.cursor.execute('''UPDATE episode_data SET watched=1,force_watched=1 WHERE torrent=?''',(torrenturl,))
         elif id:
-            self.cursor.execute('''UPDATE episode_data SET watched=1 WHERE id =?''',(id,))
+            self.cursor.execute('''UPDATE episode_data SET watched=1,force_watched=1 WHERE id =?''',(id,))
         self.conn.commit()
         
     def unHideSeries(self, title):
