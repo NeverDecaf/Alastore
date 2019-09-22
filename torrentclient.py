@@ -3,23 +3,23 @@ from requests.compat import urljoin
 from constants import *
 import re
 import inspect
+import bencoder
+import hashlib
 
 # To add support for a different RSS feed
 # you MUST subclass Torrent and implement these methods:
-# match
-# _get_active_torrents
+# match (@staticmethod)
 # get_add_args
-# rss_key
-# rss_compare
 
 # see the Shana class for an example
 
 class QBittorrent(object):
     TRIES = 2
-    def __init__(self,username='',password=''):
+    def __init__(self, sqlmanager, username='',password=''):
         super().__init__()
         self.s = requests.Session()
         self.set_credentials(username,password)
+        self.sql = sqlmanager
 ##        self._login()
     def set_credentials(self,uname=None,pword=None):
         if uname:
@@ -79,25 +79,29 @@ class QBittorrent(object):
     def get_active_torrents(self):
         'use rss urls to match a parser, then return a list of Torrent objects'
         rssData = self._get_rss_entries()
-        rssMap = {}
+        exitinginfohashes = self.sql.getRSSUrls()
+        # generate infohash from (new) torrent files:
+        for url,title in [(d['link'],d['title']) for d in rssData]:
+            if url not in exitinginfohashes:
+                with requests.get(url, timeout=REQUESTS_TIMEOUT) as r:
+                    torrent_file = bencoder.decode(r.content)
+                    m = hashlib.sha1(bencoder.encode(torrent_file[b'info']))
+                    self.sql.setRSSHashes(url, m.hexdigest(), title)
+        rss_dict = self.sql.getRSSDict()
+        
         feed_sources = []
         for name, obj in inspect.getmembers(self):
             if hasattr(obj, "__bases__") and self.Torrent in obj.__bases__:
                 feed_sources.append(obj)
-        for itm in rssData:
-            for obj in feed_sources:
-                if obj.match(itm['link']):
-                    rssMap[obj.rss_key(itm)] = itm
-                    break
+
         torrents = []
         for torrent in self._get_torrent_list():
             props = self._get_properties(torrent['hash'])
             if len(self._get_files(torrent['hash'])) == 1:
                 try:
                     for obj in feed_sources:
-                        if obj.rss_compare(torrent,props) in rssMap:
-                            rdata = rssMap[obj.rss_compare(torrent,props)]
-                            torrents.append(obj((torrent['name'],rdata['title'],torrent['hash'],torrent['save_path'],torrent['progress'])))
+                        if obj.match(rss_dict[torrent['hash']][0]):
+                            torrents.append(obj((torrent['name'],rss_dict[torrent['hash']][1],torrent['hash'],torrent['save_path'],torrent['progress'])))
                             break
                 except:
                     pass
@@ -116,19 +120,12 @@ class QBittorrent(object):
         @staticmethod
         def match(url):
             return re.compile('^https?://(www\.)?animebytes.tv/torrent').match(url)
-        @staticmethod
-        def rss_key(rdata):
-            return rdata['comments']
-        @staticmethod
-        def rss_compare(torrent, props):
-            return props['comment']
-        
         def get_add_args(self):
             return (self._display_name_from_torrent(),
                     self._series_title_from_torrent(),
                     self._episode_no_from_torrent(),
                     self._subgroup_name_from_torrent(),
-                    self.data[2])
+                    self.data[2]) # data[2] is infohash
         def _series_title_from_torrent(self):
             'use data from get_active_torrents'
             return self.RSS_TITLE_RE.findall(self.data[1])[0]
@@ -154,19 +151,12 @@ class QBittorrent(object):
         @staticmethod
         def match(url):
             return re.compile('^https?://(www\.)?shanaproject\.com/download/',re.I).match(url)
-        @staticmethod
-        def rss_key(rdata):
-            return rdata['description']
-        @staticmethod
-        def rss_compare(torrent, props):
-            return torrent['name']
-        
         def get_add_args(self):
             return (self._display_name_from_torrent(),
                     self._series_title_from_torrent(),
                     self._episode_no_from_torrent(),
                     self._subgroup_name_from_torrent(),
-                    self.data[2])
+                    self.data[2]) # data[2] is infohash
         def _series_title_from_torrent(self):
             return self.RSS_TITLE_RE.findall(self.data[1])[0]
         def _display_name_from_torrent(self):
@@ -181,6 +171,7 @@ class QBittorrent(object):
                 return self.SUBGROUP.findall(self.data[1])[-1]
             except IndexError:
                 return None
+                
 if __name__ == "__main__":
     q = QBittorrent()
     for t in q.get_active_torrents():

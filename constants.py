@@ -8,6 +8,7 @@ TORRENTC_CATEGORY = 'Alastore'
 TORRENTC_LIMIT = 500
 TORRENTC_WATCHED_CATEGORY = 'Alastore (watched)'
 WEBUI_URL = 'http://localhost:8080'
+REQUESTS_TIMEOUT = 10
 
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """

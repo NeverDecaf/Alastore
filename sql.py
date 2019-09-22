@@ -59,7 +59,8 @@ class SQLManager:
                  (id integer PRIMARY KEY AUTOINCREMENT, title text, aid integer DEFAULT NULL, cover_art integer DEFAULT 0,
                  hidden integer DEFAULT 0, airdate text, season text, poster_url text, series_info integer DEFAULT 0,
                  last_poster_url text DEFAULT NULL, last_update integer DEFAULT (strftime('%s', 'now')), verified_aid integer DEFAULT 0, aid_update integer DEFAULT 0)''')
-
+        self.cursor.execute('''CREATE TABLE IF NOT EXISTS rss_cache
+                 (url text, infohash text PRIMARY KEY, title text)''')
         # these must have the same structure with the addition of aid to anidb_force_added
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS parse_data
                  (path text PRIMARY KEY, ed2k text, filesize integer, id integer, episode integer, subgroup text, added_on integer DEFAULT (strftime('%s', 'now')), last_add_attempt integer DEFAULT (strftime('%s', 'now')))''')
@@ -427,4 +428,20 @@ ELSE aid END AS aid
     def anidbSetDelay(self,delay):
         self.cursor.execute('''UPDATE anidb_limiting SET delay=? WHERE id=0''',(delay,))
         self.conn.commit()
-        
+    # def getRSSHashes(self, limit=200):
+        # 'return dict in form url:infohash'
+        # self.cursor.execute('''SELECT url,infohash FROM rss_cache ORDER BY ROWID DESC LIMIT ?''',(limit,))
+        # result = self.cursor.fetchall()
+        # return {k:v for k,v in result}
+    def getRSSUrls(self, limit=200):
+        self.cursor.execute('''SELECT url FROM rss_cache ORDER BY ROWID DESC LIMIT ?''',(limit,))
+        result = self.cursor.fetchall()
+        return [r[0] for r in result]
+    def getRSSDict(self, limit=200):
+        'return dict of infohash:(url,title)'
+        self.cursor.execute('''SELECT infohash,url,title FROM rss_cache ORDER BY ROWID DESC LIMIT ?''',(limit,))
+        result = self.cursor.fetchall()
+        return {r[0]:(r[1],r[2]) for r in result}
+    def setRSSHashes(self, url, infohash, title):
+        self.cursor.execute('''REPLACE INTO rss_cache (url,infohash,title) VALUES (?,?,?)''',(url,infohash,title))
+        self.conn.commit()
