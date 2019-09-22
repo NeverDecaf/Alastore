@@ -3,7 +3,7 @@
 #### What is this branch?
 This branch uses the QBittorrent Web UI to interface directly with your torrent client. It should behave very similarly to the main branch with a few differences:
 - When a file is sorted its location will also be updated in qbittorrent meaning it will no longer be reported as file missing and can continue to be seeded.
-- Adding different RSS sources is very easy, just subclass Torrent in torrentclient.py. Currently supported RSS Feeds: Shanaproject, AnimeBytes.
+- Adding different RSS sources is very easy, just subclass Torrent in torrentclient.py. Currently supported RSS Feeds: Shanaproject, AnimeBytes, HorribleSubs.
 - Adding support for other torrent clients is possible as long as they provide the minimum api necessary (would require modifying torrentclient.py)
 #### Binaries
 - Check the dist/ folder for an updated .exe
