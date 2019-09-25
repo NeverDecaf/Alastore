@@ -7,6 +7,7 @@ import bencoder
 import hashlib
 from binascii import hexlify
 from base64 import b32decode
+from sql import SQLManager
 # To add support for a different RSS feed
 # you MUST subclass Torrent and implement these methods:
 # match (@staticmethod)
@@ -16,11 +17,10 @@ from base64 import b32decode
 
 class QBittorrent(object):
     TRIES = 2
-    def __init__(self, sqlmanager, username='',password=''):
+    def __init__(self, username='',password=''):
         super().__init__()
         self.s = requests.Session()
         self.set_credentials(username,password)
-        self.sql = sqlmanager
 ##        self._login()
     def set_credentials(self,uname=None,pword=None):
         if uname:
@@ -84,42 +84,46 @@ class QBittorrent(object):
     def get_active_torrents(self):
         'use rss urls to match a parser, then return a list of Torrent objects'
         # rssData = self._get_rss_entries()
-        exitinginfohashes = self.sql.getRSSUrls()
-        # generate infohash from (new) torrent files:
-        for feed_url, articles in self._get_rss_entries().items():
-            for url,title in [(d['link'],d['title']) for d in articles]:
-                if url not in exitinginfohashes:
-                    # if magnet, just extract the infohash.
-                    hash_re = re.compile('urn:btih:(\w{32,40})',re.I)
-                    m = hash_re.search(url)
-                    if m:
-                        infohash = m.group(1)
-                        if len(infohash)==32:
-                            infohash = hexlify(b32decode(infohash))
-                        self.sql.setRSSHashes(url, infohash.lower(), title, feed_url)
-                    else:
-                        with requests.get(url, timeout=REQUESTS_TIMEOUT) as r:
-                            torrent_file = bencoder.decode(r.content)
-                            m = hashlib.sha1(bencoder.encode(torrent_file[b'info']))
-                            self.sql.setRSSHashes(url, m.hexdigest(), title, feed_url)
-        rss_dict = self.sql.getRSSDict()
-        
-        feed_sources = []
-        for name, obj in inspect.getmembers(self):
-            if hasattr(obj, "__bases__") and self.Torrent in obj.__bases__:
-                feed_sources.append(obj)
+        with SQLManager() as sql:
+            exitinginfohashes = sql.getRSSUrls()
+            # generate infohash from (new) torrent files:
+            for feed_url, articles in self._get_rss_entries().items():
+                for url,title in [(d['link'],d['title']) for d in articles]:
+                    if url not in exitinginfohashes:
+                        # if magnet, just extract the infohash.
+                        hash_re = re.compile('urn:btih:(\w{32,40})',re.I)
+                        m = hash_re.search(url)
+                        if m:
+                            infohash = m.group(1)
+                            if len(infohash)==32:
+                                infohash = hexlify(b32decode(infohash))
+                            sql.setRSSHashes(url, infohash.lower(), title, feed_url)
+                        else:
+                            try:
+                                with requests.get(url, timeout=REQUESTS_TIMEOUT) as r:
+                                    torrent_file = bencoder.decode(r.content)
+                                    m = hashlib.sha1(bencoder.encode(torrent_file[b'info']))
+                                    sql.setRSSHashes(url, m.hexdigest(), title, feed_url)
+                            except AssertionError:
+                                'bencode decode failed'
+            rss_dict = sql.getRSSDict()
+            
+            feed_sources = []
+            for name, obj in inspect.getmembers(self):
+                if hasattr(obj, "__bases__") and self.Torrent in obj.__bases__:
+                    feed_sources.append(obj)
 
-        torrents = []
-        for torrent in self._get_torrent_list():
-            props = self._get_properties(torrent['hash'])
-            if len(self._get_files(torrent['hash'])) == 1:
-                try:
-                    for obj in feed_sources:
-                        if obj.match(rss_dict[torrent['hash']][2]):
-                            torrents.append(obj((torrent['name'],rss_dict[torrent['hash']][1],torrent['hash'],torrent['save_path'],torrent['progress'])))
-                            break
-                except:
-                    pass
+            torrents = []
+            for torrent in self._get_torrent_list():
+                props = self._get_properties(torrent['hash'])
+                if len(self._get_files(torrent['hash'])) == 1:
+                    try:
+                        for obj in feed_sources:
+                            if obj.match(rss_dict[torrent['hash']][2]):
+                                torrents.append(obj((torrent['name'],rss_dict[torrent['hash']][1],torrent['hash'],torrent['save_path'],torrent['progress'])))
+                                break
+                    except:
+                        pass
         return torrents
     class Torrent(object):
         def __init__(self,data):

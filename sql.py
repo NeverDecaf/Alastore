@@ -29,7 +29,13 @@ class SQLManager:
         self.conn=sqlite3.connect(self.db)
         self.cursor=self.conn.cursor()
         self._createTables()
-
+        
+    def __enter__(self):
+        return self
+        
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        
     # Closes this SQLManager's current connection to the db.
     def close(self):
         self.conn.close()

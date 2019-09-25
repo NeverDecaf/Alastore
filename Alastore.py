@@ -211,7 +211,7 @@ class TreeModel(QtCore.QAbstractItemModel):
         self._shanalink = ShanaLink()
         asyncio.ensure_future(self.first_update())
         asyncio.ensure_future(self.full_update_loop())
-        self.qblink = torrentclient.QBittorrent(sqlmanager)
+        self.qblink = torrentclient.QBittorrent()
 
     def _updateData(self):
         self.data = self._sqlManager.getSeries()
