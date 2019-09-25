@@ -66,7 +66,8 @@ class QBittorrent(object):
         r = self._login_if_needed(lambda: self.s.post(url=urljoin(WEBUI_URL,'/api/v2/rss/items'), data={'withData':True}))
         feeds = {}
         for key,feed in r.json().items():
-            feeds[feed['url']]=feed['articles']
+            if key.lower().startswith(feedname.lower()):
+                feeds[feed['url']]=feed['articles']
         return feeds
         # this would allow multiple rss feeds at once: (commented because only one Torrent subclass can be used at a time)
         l=[feed['articles'] for key,feed in r.json().items() if key.startswith(feedname)]
@@ -101,11 +102,16 @@ class QBittorrent(object):
                         else:
                             try:
                                 with requests.get(url, timeout=REQUESTS_TIMEOUT) as r:
+                                    r.raise_for_status()
                                     torrent_file = bencoder.decode(r.content)
                                     m = hashlib.sha1(bencoder.encode(torrent_file[b'info']))
                                     sql.setRSSHashes(url, m.hexdigest(), title, feed_url)
-                            except AssertionError:
-                                'bencode decode failed'
+                            except (AssertionError, requests.exceptions.HTTPError):
+                                'file not reachable. probably deleted. mark as such and ignore.'
+                                sql.setRSSHashes(url, None, title, feed_url)
+                            except requests.exceptions.RequestException:
+                                'this must be caught AFTER HTTPError as it inclues that error'
+                                'outage or similar, warrants a retry later.'
             rss_dict = sql.getRSSDict()
             
             feed_sources = []
@@ -219,6 +225,8 @@ class QBittorrent(object):
                 return None
 if __name__ == "__main__":
     import sql
-    qb = QBittorrent(sql.SQLManager())
+    a = sql.SQLManager()
+    a._createTables()
+    qb = QBittorrent(a)
     for t in qb.get_active_torrents():
-        print(t.get_add_args())
+        print(type(t).__name__,t.get_add_args())

@@ -66,7 +66,7 @@ class SQLManager:
                  hidden integer DEFAULT 0, airdate text, season text, poster_url text, series_info integer DEFAULT 0,
                  last_poster_url text DEFAULT NULL, last_update integer DEFAULT (strftime('%s', 'now')), verified_aid integer DEFAULT 0, aid_update integer DEFAULT 0)''')
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS rss_cache
-                 (url text, infohash text PRIMARY KEY, title text, feed_url text)''')
+                 (url text, infohash text, title text, feed_url text, PRIMARY KEY (infohash, url))''')
         # these must have the same structure with the addition of aid to anidb_force_added
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS parse_data
                  (path text PRIMARY KEY, ed2k text, filesize integer, id integer, episode integer, subgroup text, added_on integer DEFAULT (strftime('%s', 'now')), last_add_attempt integer DEFAULT (strftime('%s', 'now')))''')
@@ -434,13 +434,13 @@ ELSE aid END AS aid
     def anidbSetDelay(self,delay):
         self.cursor.execute('''UPDATE anidb_limiting SET delay=? WHERE id=0''',(delay,))
         self.conn.commit()
-    def getRSSUrls(self, limit=200):
+    def getRSSUrls(self, limit=RSS_FEED_LIMIT):
         self.cursor.execute('''SELECT url FROM rss_cache ORDER BY ROWID DESC LIMIT ?''',(limit,))
         result = self.cursor.fetchall()
         return [r[0] for r in result]
-    def getRSSDict(self, limit=200):
+    def getRSSDict(self, limit=RSS_FEED_LIMIT):
         'return dict of infohash:(url,title,feed_url)'
-        self.cursor.execute('''SELECT infohash,url,title,feed_url FROM rss_cache ORDER BY ROWID DESC LIMIT ?''',(limit,))
+        self.cursor.execute('''SELECT infohash,url,title,feed_url FROM rss_cache WHERE infohash IS NOT NULL ORDER BY ROWID DESC LIMIT ?''',(limit,))
         result = self.cursor.fetchall()
         return {r[0]:(r[1],r[2],r[3]) for r in result}
     def setRSSHashes(self, url, infohash, title, feed_url):

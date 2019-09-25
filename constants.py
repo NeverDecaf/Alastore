@@ -9,7 +9,7 @@ TORRENTC_LIMIT = 500
 TORRENTC_WATCHED_CATEGORY = 'Alastore (watched)'
 WEBUI_URL = 'http://localhost:8080'
 REQUESTS_TIMEOUT = 10
-
+RSS_FEED_LIMIT = 600 #this is across ALL feeds
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
     try:
