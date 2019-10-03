@@ -760,10 +760,13 @@ You should only use this option if a file fails to download or is moved/deleted 
                                                                                                 #file name, rsstitle,torrent url + download dir, progress (0-1)
                     async with self.async_writelock:
                         path = os.path.join(data[3],data[0])
-                        if self._sqlManager.addEpisode(path,*(item.get_add_args())):
-                            self._sqlManager.addTorrentData(path,data[2],None,data[0])
-                            self.sqlDataChanged()
-##                        print('add fail')
+                        try:
+                            args = item.get_add_args()
+                            if self._sqlManager.addEpisode(path,*args):
+                                self._sqlManager.addTorrentData(path,data[2],None,data[0])
+                                self.sqlDataChanged()
+                        except:
+                            'failed to get add args, rss might contain invalid episodes'
 
         async def anidb_adds():
             async with self.async_writelock:

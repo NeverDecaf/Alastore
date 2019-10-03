@@ -131,6 +131,22 @@ class QBittorrent(object):
                     except:
                         pass
         return torrents
+        
+    def add_rss_rule(self,title,resolution,subgroup,feedurls,category='Alastore'):
+        'feedurls is a list of feeds ["feed"]'
+        import json
+        # case doesnt seem to matter
+        matcher = '^{}.*{}.*Softsubs \({}\)'
+        ruleDef = json.dumps({'enabled':True,
+        'mustContain':matcher.format(re.escape(title),resolution,subgroup),
+        'useRegex':True,
+        'smartFilter':True,
+        'affectedFeeds':feedurls,
+        'assignedCategory':category,
+        })
+        r = self._login_if_needed(lambda: self.s.post(url=urljoin(WEBUI_URL,'/api/v2/rss/setRule'), data={'ruleName':title,'ruleDef':ruleDef}))
+        return r.text
+        
     class Torrent(object):
         def __init__(self,data):
             self.data = data
@@ -229,4 +245,7 @@ if __name__ == "__main__":
     a._createTables()
     qb = QBittorrent(a)
     for t in qb.get_active_torrents():
-        print(type(t).__name__,t.get_add_args())
+        try:
+            print(type(t).__name__,t.get_add_args())
+        except:
+            print('add args failed on',type(t).__name__,t.get_data())
