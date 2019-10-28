@@ -427,6 +427,17 @@ You should only use this option if a file fails to download or is moved/deleted 
                 user_settings = self._sqlManager.getSettings()
                 title = index.internalPointer().title()
                 id = index.internalPointer().id()
+                async def on_success():
+                    self._sqlManager.hideSeries(id)
+                    if delete:
+                        paths = self._sqlManager.getAllPaths(id)
+                        for path in paths:
+                            directory = os.path.dirname(path)
+                            if os.path.isfile(path):
+                                await loop.run_in_executor(None,os.remove,path)
+                            await TreeModel.cleanFolder(directory)
+                        self._sqlManager.dropSeries(id)
+                    self.sqlDataChanged()
                 if user_settings and user_settings['Shana Project Username'] and user_settings['Shana Project Password']:
                     async with self.async_shanalock:
 ##                        await self._shanalink.update_creds(user_settings['Shana Project Username'],user_settings['Shana Project Password'])
@@ -440,20 +451,11 @@ You should only use this option if a file fails to download or is moved/deleted 
                             QtWidgets.QMessageBox.information(parent,self.tr('Drop Failed'),self.tr('Could not connect to Shana Project to drop {}, check your login credentials and internet connection.').format(index.internalPointer().title()))
                         else:
                             if success:
-                                self._sqlManager.hideSeries(id)
-                                if delete:
-                                    paths = self._sqlManager.getAllPaths(id)
-                                    for path in paths:
-                                        directory = os.path.dirname(path)
-                                        if os.path.isfile(path):
-                                            await loop.run_in_executor(None,os.remove,path)
-                                        await TreeModel.cleanFolder(directory)
-                                    self._sqlManager.dropSeries(id)
-                                self.sqlDataChanged()
+                                await on_success()
                             else:
                                 QtWidgets.QMessageBox.information(parent,self.tr('Drop Failed'),self.tr('Could not connect to Shana Project to drop {}, check your login credentials and internet connection.').format(index.internalPointer().title()))
                 else:
-                    QtWidgets.QMessageBox.information(parent,self.tr('Drop Failed'),self.tr('Could not connect to Shana Project to drop {}, check your login credentials and internet connection.').format(index.internalPointer().title()))
+                    await on_success()
         drop = DropDialog(index.internalPointer().title(),parent)
         drop.exec_()
         drop,delete = drop.getValues()
