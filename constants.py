@@ -39,6 +39,7 @@ CLIENT='alastorehttp'
 CLIENTVER='1'
 UDPCLIENT='alastore'
 UDPCLIENTVER='1'
+ANIDB_API_URL = 'https://anidb.net/perl-bin/animedb.pl'
 
 #shana_interface:
 SP_LOGIN_URL = 'https://www.shanaproject.com/login/'

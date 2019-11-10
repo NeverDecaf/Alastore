@@ -189,7 +189,13 @@ custom_icons AS "{}", auto_hide_old AS "{}", shanaproject_username AS "{}", shan
     def dropSeries(self, id):
         self.cursor.execute('''UPDATE episode_data SET downloaded=0, download_percent=0, torrent_data=NULL WHERE id = ?''',(id,))
         self.conn.commit()
-
+        
+    def getSeriesAid(self, id):
+        r = self.cursor.execute('''SELECT aid FROM shana_series WHERE id=? and verified_aid=1''',(id,))
+        res = r.fetchone()
+        if res:
+            return res[0]
+            
     # marks an/all episodes of a series as watched, regardless of file state.
     def forceWatched(self,id=None,torrenturl=None):
         if torrenturl:

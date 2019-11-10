@@ -430,6 +430,13 @@ You should only use this option if a file fails to download or is moved/deleted 
                             QtWidgets.QMessageBox.information(parent,self.tr('Drop Failed'),self.tr('Could not connect to Shana Project to drop {}, check your login credentials and internet connection.').format(index.internalPointer().title()))
                         else:
                             if success:
+                                if user_settings and user_settings['anidb Username'] and user_settings['anidb Password']:
+                                    aid = self._sqlManager.getSeriesAid(id)
+                                    if not aid:
+                                        QtWidgets.QMessageBox.information(parent,self.tr('Drop Failed'),self.tr('Could not connect to AniDB to drop {}. Please go to anidb.net and drop series manually.').format(index.internalPointer().title()))
+                                    result = await loop.run_in_executor(None, anidb.anidb_drop_series, aid, user_settings['anidb Username'], user_settings['anidb Password'])
+                                    if not result:
+                                        QtWidgets.QMessageBox.information(parent,self.tr('Drop Failed'),self.tr('Could not connect to AniDB to drop {}. Please go to anidb.net and drop series manually.').format(index.internalPointer().title()))
                                 self._sqlManager.hideSeries(id)
                                 if delete:
                                     paths = self._sqlManager.getAllPaths(id)
