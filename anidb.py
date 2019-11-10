@@ -8,6 +8,7 @@ import socket
 import time
 import hashlib
 import os
+import constants
 ##import re
 import gzip
 # get info from http api
@@ -32,6 +33,38 @@ RETURN_CODES={
     506:'INVALID SESSION',
     }
 NERFED = 0 # set true to disable for testing
+
+def anidb_drop_series(aid, username, password):
+    # create new session & login
+    try:
+        ses = requests.session()
+        _ = {'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3', 'accept-encoding': 'gzip, deflate, br', 'accept-language': 'en-US,en;q=0.9', 'cache-control': 'max-age=0', 'origin': 'https://anidb.net', 'referer': 'https://anidb.net/user/login', 'sec-fetch-mode': 'navigate', 'sec-fetch-site': 'same-origin', 'sec-fetch-user': '?1', 'upgrade-insecure-requests': '1', 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.120 Safari/537.36', 'content-type': 'application/x-www-form-urlencoded'}
+        data = {
+                'show': 'main',
+                'xuser': username,
+                'xpass': password,
+                'xdoautologin': 'on',
+                'xkeepoldcookie': 'on',
+                'do.auth.x': 'Login',
+                }
+        r=ses.post(constants.ANIDB_API_URL, params=data, headers = constants.TORRENT_HEADERS)
+        r.raise_for_status()
+        # now mark the aid as dropped
+        mod = {
+        'show':'mylist',
+        'addl.aid':aid,
+        'do':'realedit.state',
+        'headless':1,
+        'nonav':1,
+        'addl.state':5,
+        'state.edit':1,
+        }
+        r=ses.post(constants.ANIDB_API_URL, params=mod, headers = constants.TORRENT_HEADERS)
+        r.raise_for_status()
+        return True
+    except:
+        return False
+    
 def anidb_series_info(aid):
     if NERFED:
         return None,None
@@ -415,12 +448,12 @@ if __name__ == '__main__':
 ##    loop.close()
 
 ##    print(len(anidb_title_list()))
-    
-    from contextlib import closing
-    files = [r'']
-    with closing(anidbInterface()) as a:
-        a.open_session(username,password)
-        for path in files:
-            hashe = a.ed2k_hash(path)
-            a.add_file(None,None,None,None,hashe[0],0,None)
-    
+    # print(dict([[h.partition(':')[0].strip(), h.partition(':')[2].strip()] for h in rawheaders.split('\n')]))
+    # from contextlib import closing
+    # files = [r'']
+    # with closing(anidbInterface()) as a:
+        # a.open_session(username,password)
+        # for path in files:
+            # hashe = a.ed2k_hash(path)
+            # a.add_file(None,None,None,None,hashe[0],0,None)
+    pass
