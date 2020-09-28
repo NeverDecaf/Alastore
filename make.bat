@@ -9,5 +9,5 @@ REM C:\Python27\Scripts\pyinstaller --clean --noconfirm Alastore.spec
 
 call .\venv\Scripts\activate
 DEL .\dist\Alastore.exe
-venv\Scripts\pyinstaller --clean --noconfirm Alastore.spec
+pyinstaller --clean --noconfirm Alastore.spec
 call .\venv\Scripts\deactivate

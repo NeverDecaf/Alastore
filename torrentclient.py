@@ -131,7 +131,9 @@ class QBittorrent(object):
                     except:
                         pass
         return torrents
-        
+    def get_all_rss_rules(self):
+        r = self._login_if_needed(lambda: self.s.post(url=urljoin(WEBUI_URL,'/api/v2/rss/rules')))
+        return r.json()
     def add_rss_rule(self,title,resolution,subgroup,feedurls,category='Alastore'):
         'feedurls is a list of feeds ["feed"]'
         import json
@@ -145,6 +147,10 @@ class QBittorrent(object):
         'assignedCategory':category,
         })
         r = self._login_if_needed(lambda: self.s.post(url=urljoin(WEBUI_URL,'/api/v2/rss/setRule'), data={'ruleName':title,'ruleDef':ruleDef}))
+        return r.text
+        
+    def remove_rss_rule(self,title,category='Alastore'):
+        r = self._login_if_needed(lambda: self.s.post(url=urljoin(WEBUI_URL,'/api/v2/rss/removeRule'), data={'ruleName':title}))
         return r.text
         
     class Torrent(object):
