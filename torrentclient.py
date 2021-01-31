@@ -134,7 +134,7 @@ class QBittorrent(object):
     def get_all_rss_rules(self):
         r = self._login_if_needed(lambda: self.s.post(url=urljoin(WEBUI_URL,'/api/v2/rss/rules')))
         return r.json()
-    def add_rss_rule(self,title,resolution,subgroup,feedurls,category='Alastore'):
+    def add_rss_rule(self,title,resolution,subgroup,feedurls,category='Alastore',ignoreDays=0):
         'feedurls is a list of feeds ["feed"]'
         import json
         # case doesnt seem to matter
@@ -145,6 +145,7 @@ class QBittorrent(object):
         'smartFilter':True,
         'affectedFeeds':feedurls,
         'assignedCategory':category,
+        'ignoreDays':ignoreDays,
         })
         r = self._login_if_needed(lambda: self.s.post(url=urljoin(WEBUI_URL,'/api/v2/rss/setRule'), data={'ruleName':title,'ruleDef':ruleDef}))
         return r.text

@@ -15,7 +15,8 @@ encoding = 'utf8'
 site_filename = 'Currently Airing Anime AnimeBytes'
 # can use regex for the below, but be careful of duplicate episodes as qbittorrent does not correctly handle these (yet?)
 qual = '720p'
-group = 'HorribleSubs'
+group = '.*'#'HorribleSubs'
+IGNORE_DAYS = 5 # if using .* as group, set this to ~5 to prevent downloading duplicate episodes
 # create a file rss_url which contains your private AB feed: https://animebytes.tv/feed/rss_torrents_airing_anime/<YOUR_SECRET_HERE>
 class ABAPI(object):
     def __init__(self,uname,pkey):
@@ -127,7 +128,7 @@ if __name__=='__main__':
             spairs[k] = -1
     for title,follow in spairs.items():
         if follow==1:
-            qb.add_rss_rule(title,qual,group,[rssurl])
+            qb.add_rss_rule(title,qual,group,[rssurl],ignoreDays = IGNORE_DAYS)
         elif follow==0:
             qb.remove_rss_rule(title)
         # else follow == -1, do not modify.
