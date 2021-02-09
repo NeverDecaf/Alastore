@@ -440,8 +440,8 @@ ELSE aid END AS aid
     def anidbSetDelay(self,delay):
         self.cursor.execute('''UPDATE anidb_limiting SET delay=? WHERE id=0''',(delay,))
         self.conn.commit()
-    def getRSSUrls(self, limit=RSS_FEED_LIMIT):
-        self.cursor.execute('''SELECT url FROM rss_cache ORDER BY ROWID DESC LIMIT ?''',(limit,))
+    def getHashedRSSUrls(self, limit=RSS_FEED_LIMIT):
+        self.cursor.execute('''SELECT url FROM rss_cache WHERE infohash IS NOT NULL ORDER BY ROWID DESC LIMIT ?''',(limit,))
         result = self.cursor.fetchall()
         return [r[0] for r in result]
     def getRSSDict(self, limit=RSS_FEED_LIMIT):

@@ -86,7 +86,7 @@ class QBittorrent(object):
         'use rss urls to match a parser, then return a list of Torrent objects'
         # rssData = self._get_rss_entries()
         with SQLManager() as sql:
-            exitinginfohashes = sql.getRSSUrls()
+            exitinginfohashes = sql.getHashedRSSUrls()
             # generate infohash from (new) torrent files:
             for feed_url, articles in self._get_rss_entries().items():
                 for url,title in [(d['link'],d['title']) for d in articles]:
