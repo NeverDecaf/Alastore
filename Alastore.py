@@ -612,7 +612,9 @@ You should only use this option if a file fails to download or is moved/deleted 
     """OUTPUT: QModelIndex"""
     """Should return the parent of the node with the given QModelIndex"""
     def parent(self, index):
-        
+        if not index.isValid():
+            return QtCore.QModelIndex()
+            
         node = self.getNode(index)
         parentNode = node.parent()
         
