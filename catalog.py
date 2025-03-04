@@ -1,6 +1,7 @@
 import winshell, re, os
 
-HASYEAR = re.compile('.*\d\d\d\d')
+ISYEAR = re.compile(r'^\d{4}$')
+HASYEAR = re.compile(r'.*(Spring|Summer|Fall|Winter) \d{4}')
 def mkDir(dname):
     if not os.path.isdir(dname):
         os.makedirs(dname)
@@ -16,7 +17,7 @@ def retro_link(src):
     src = os.path.abspath(src)
     years = []
     for f in os.listdir(src):
-        if HASYEAR.match(f) and os.path.isdir(os.path.join(src,f)):
+        if ISYEAR.match(f) and os.path.isdir(os.path.join(src,f)):
             years.append(os.path.join(src,f))
     seasons=[]
     for year in years:

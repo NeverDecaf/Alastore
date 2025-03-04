@@ -134,19 +134,22 @@ class QBittorrent(object):
     def get_all_rss_rules(self):
         r = self._login_if_needed(lambda: self.s.post(url=urljoin(WEBUI_URL,'/api/v2/rss/rules')))
         return r.json()
-    def add_rss_rule(self,title,resolution,subgroup,feedurls,category='Alastore',ignoreDays=0):
+    def add_rss_rule(self,title,resolution,subgroup,feedurls,category='Alastore',ignoreDays=0,savePath=None):
         'feedurls is a list of feeds ["feed"]'
         import json
         # case doesnt seem to matter
         matcher = '^{}.*{}.*Softsubs \({}\)'
-        ruleDef = json.dumps({'enabled':True,
-        'mustContain':matcher.format(re.escape(title),resolution,subgroup),
-        'useRegex':True,
-        'smartFilter':True,
-        'affectedFeeds':feedurls,
-        'assignedCategory':category,
-        'ignoreDays':ignoreDays,
-        })
+        opt = {'enabled':True,
+            'mustContain':matcher.format(re.escape(title),resolution,subgroup),
+            'useRegex':True,
+            'smartFilter':True,
+            'affectedFeeds':feedurls,
+            'assignedCategory':category,
+            'ignoreDays':ignoreDays,
+        }
+        if savePath:
+            opt['savePath'] = savePath
+        ruleDef = json.dumps(opt)
         r = self._login_if_needed(lambda: self.s.post(url=urljoin(WEBUI_URL,'/api/v2/rss/setRule'), data={'ruleName':title,'ruleDef':ruleDef}))
         return r.text
         

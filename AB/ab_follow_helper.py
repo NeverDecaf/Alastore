@@ -10,14 +10,19 @@ from PyQt5.QtCore import QTimer
 import sqlite3
 import requests
 import time
+from configparser import SafeConfigParser
+
+config = SafeConfigParser(allow_no_value=True)
+config.read('ab_helper_config.ini')
+qual = config.get('Settings', 'QUALITY')
+group = config.get('Settings', 'GROUP')
+IGNORE_DAYS = config.getint('Settings', 'IGNORE_DAYS')
+SAVE_PATH = config.get('Settings', 'SAVE_PATH')
+rssurl = config.get('Settings', 'FEED_URL')
 
 encoding = 'utf8'
-site_filename = 'Currently Airing Anime AnimeBytes'
-# can use regex for the below, but be careful of duplicate episodes as qbittorrent does not correctly handle these (yet?)
-qual = '720p'
-group = '.*'#'HorribleSubs'
-IGNORE_DAYS = 5 # if using .* as group, set this to ~5 to prevent downloading duplicate episodes
-# create a file rss_url which contains your private AB feed: https://animebytes.tv/feed/rss_torrents_airing_anime/<YOUR_SECRET_HERE>
+site_filename = 'Currently Airing Anime __ AnimeBytes'
+
 class ABAPI(object):
     def __init__(self,uname,pkey):
         self.user = uname
@@ -114,8 +119,6 @@ if __name__=='__main__':
     a = sql.SQLManager()
     a._createTables()
     qb = torrentclient.QBittorrent(a)
-    with open('rss_url','r') as f:
-        rssurl = f.readline()
     db = sqlite3.connect('follows.sqlitedb')
     r=db.cursor().execute('SELECT name,following FROM follows WHERE airing=1')
     spairs = dict(r.fetchall())
@@ -128,7 +131,7 @@ if __name__=='__main__':
             spairs[k] = -1
     for title,follow in spairs.items():
         if follow==1:
-            qb.add_rss_rule(title,qual,group,[rssurl],ignoreDays = IGNORE_DAYS)
+            qb.add_rss_rule(title,qual,group,[rssurl],ignoreDays = (IGNORE_DAYS or 0), savePath = SAVE_PATH)
         elif follow==0:
             qb.remove_rss_rule(title)
         # else follow == -1, do not modify.

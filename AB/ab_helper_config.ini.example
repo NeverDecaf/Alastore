@@ -1,0 +1,10 @@
+[Settings]
+; quality and group both support regex
+QUALITY=1080p
+GROUP=.*
+; if you accept multiple groups (.* for example) then you must set this to prevent qbittorrent downloading multiple of the same episode
+IGNORE_DAYS=5
+; FEED_URL is https://animebytes.tv/feed/rss_torrents_airing_anime/<YOUR_SECRET_HERE>
+FEED_URL=
+; if set, will save torrents to the specified path
+SAVE_PATH=
