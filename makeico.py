@@ -21,11 +21,23 @@ def resize_center_image(image):
     return background
     return image.crop((x,y,IMAGE_SIZE[0]+x,IMAGE_SIZE[1]+y))
 
+def image_is_unchanged(img, existing_path):
+    """Compare the new image with an existing file."""
+    try:
+        with Image.open(existing_path) as ico_img:
+            ico_img = ico_img.convert("RGBA")
+            return img.convert("RGBA").tobytes() == ico_img.tobytes()
+    except:
+        return False  # If file can't be read, assume it's different
+        
 def makeIcon(aid,url,dest_folder):
     img = anidb.anidb_dl_poster_art(url)
     img = resize_center_image(img)
+    dest_path = os.path.join(dest_folder,'%i.ico'%aid)
+    if image_is_unchanged(img, dest_path):
+        return
     buf = BytesIO()
     img.save(buf, format="PNG")
-    ico = pyico.Icon([BytesIO(buf.getvalue())],os.path.join(dest_folder,'%i.ico'%aid))
+    ico = pyico.Icon([BytesIO(buf.getvalue())],dest_path)
     ico.save()
     iconchange.seticon_unicode(dest_folder,'%i.ico'%aid,0) # dest_folder.encode('utf8') removed this and instead use seticon_unicode.
