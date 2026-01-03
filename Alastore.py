@@ -825,14 +825,26 @@ You should only use this option if a file fails to download or is moved/deleted 
             user_settings = self._sqlManager.getSettings()
             self.qblink.set_credentials(user_settings['QBittorrent Username'],user_settings['QBittorrent Password'])
             allseries = self._sqlManager.getDownloadingSeries()
+            percent_downloaded = {
+                k: int(100 * v)
+                for k, v in self.qblink.get_progress(
+                    '|'.join(
+                        e['torrent_url']
+                        for series in list(allseries.values())
+                        for e in series
+                        if '/' not in e['torrent_url'] # ignore actual urls (legacy)
+                    )
+                ).items()
+            }
+            
             for series in list(allseries.values()):
                 for episode in series:
-                    try:
-                        percent_downloaded = int(100*self.qblink.get_progress(episode['torrent_url'])) # really this is the hash
-                    except:
-                        percent_downloaded = 0
+                    ehash = episode['torrent_url'] # this is the hash now.
+                    if ehash not in percent_downloaded:
+                        percent_downloaded[ehash] = 0
                     async with self.async_writelock:
-                        self._sqlManager.setDownloading(episode['torrent_url'],None,percent_downloaded)
+                        self._sqlManager.setDownloading(ehash,None,percent_downloaded[ehash])
+                    await asyncio.sleep(0)
             if len(allseries):
                 self.sqlDataChanged()
                 

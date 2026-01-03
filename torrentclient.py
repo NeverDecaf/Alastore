@@ -56,12 +56,12 @@ class QBittorrent(object):
                 r.raise_for_status()
             break
         return r
-    def get_progress(self,ihash,category=TORRENTC_CATEGORY):
-        r = self._login_if_needed(lambda: self.s.post(url=urljoin(WEBUI_URL,'/api/v2/torrents/info'), data={'category':category, 'hashes':ihash}))
+    def get_progress(self,hashlist,category=TORRENTC_CATEGORY):
+        r = self._login_if_needed(lambda: self.s.post(url=urljoin(WEBUI_URL,'/api/v2/torrents/info'), data={'category':category, 'hashes':hashlist}))
         try:
-            return r.json()[0]['progress']
+            return {item["hash"]: item["progress"] for item in r.json()[0]}
         except:
-            return 0
+            return {}
     def _get_rss_entries(self,feedname=TORRENTC_CATEGORY):
         r = self._login_if_needed(lambda: self.s.post(url=urljoin(WEBUI_URL,'/api/v2/rss/items'), data={'withData':True}))
         feeds = {}
