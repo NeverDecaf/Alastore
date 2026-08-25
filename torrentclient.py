@@ -142,7 +142,7 @@ class QBittorrent(object):
         opt = {'enabled':True,
             'mustContain':matcher.format(re.escape(title),resolution,subgroup),
             'useRegex':True,
-            'smartFilter':True,
+            'smartFilter':False,
             'affectedFeeds':feedurls,
             'assignedCategory':category,
             'ignoreDays':ignoreDays,
